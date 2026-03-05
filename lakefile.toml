@@ -1,0 +1,20 @@
+name = "prim-parser"
+version = "0.1.0"
+defaultTargets = ["prim-parser"]
+
+[leanOptions]
+pp.unicode.fun = true
+pp.fieldNotation = false
+autoImplicit = false
+
+[[lean_lib]]
+name = "PrimParser"
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.27.0"
+
+[[lean_exe]]
+name = "prim-parser"
+root = "Main"
