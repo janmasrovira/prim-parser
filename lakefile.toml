@@ -1,6 +1,6 @@
 name = "prim-parser"
 version = "0.1.0"
-defaultTargets = ["prim-parser"]
+defaultTargets = ["PrimParser"]
 
 [leanOptions]
 pp.unicode.fun = true
@@ -14,7 +14,3 @@ name = "PrimParser"
 name = "mathlib"
 scope = "leanprover-community"
 rev = "v4.28.0"
-
-[[lean_exe]]
-name = "prim-parser"
-root = "Main"
