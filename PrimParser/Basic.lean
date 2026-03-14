@@ -1,56 +1,21 @@
-import Mathlib.Data.Vector.Basic
-import Mathlib.Order.Basic
-import Mathlib.Order.Fin.Basic
+import PrimParser.Base
+import PrimParser.Necessity
 
 abbrev Error := String
 abbrev Text (n : Nat) := List.Vector Char n
 
-inductive IsConsuming where
-  | possibly
-  | always
-
-instance : Max IsConsuming where
-  max a b := match a with
-    | .always => .always
-    | .possibly => b
-
-instance : Min IsConsuming where
-  min a b := match a with
-    | .possibly => .possibly
-    | .always => b
-
-instance : LinearOrder IsConsuming := by
-  let toFin : IsConsuming → Fin 2
-    | .possibly => 0
-    | .always => 1
-  apply LinearOrder.lift toFin
-  intro x y p; cases x <;> cases y <;> cases p <;> rfl
-  repeat (intro x y; cases x <;> cases y <;> rfl)
-
-instance : SemilatticeSup IsConsuming where
-  sup := max
-  sup_le a b c := by cases a <;> cases b <;> cases c <;> decide
-  le_sup_left a b := by cases a <;> cases b <;> decide
-  le_sup_right a b := by cases a <;> cases b <;> decide
-
-instance : Monoid IsConsuming where
-  mul := max
-  mul_assoc a b c := by cases a <;> cases b <;> cases c <;> decide
-  one := .possibly
-  one_mul a := by cases a <;> decide
-  mul_one a := by cases a <;> decide
-
-abbrev consumptionObligation (n m : Nat) : IsConsuming → Prop
+abbrev consumptionObligation (n m : Nat) : Necessity → Prop
   | .always => n < m
   | .possibly => n ≤ m
+  | .never => False
 
-structure OkResult (n : Nat) (c : IsConsuming) (α : Type) where
+structure OkResult (n : Nat) (c : Necessity) (α : Type) where
   result : α
   restSize : Nat
   proof : consumptionObligation restSize n c
   restText : Text restSize
 
-abbrev Parser (ε : Type) (c : IsConsuming) (α : Type) :=
+abbrev Parser (ε : Type) (c : Necessity) (α : Type) :=
   ∀ {n}, Text n → ε ⊕ OkResult n c α
 
 variable
