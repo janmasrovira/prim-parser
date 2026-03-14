@@ -14,3 +14,7 @@ name = "PrimParser"
 name = "mathlib"
 scope = "leanprover-community"
 rev = "v4.28.0"
+
+[[require]]
+name = "imonad"
+path = "../imonad"

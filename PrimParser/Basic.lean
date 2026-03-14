@@ -1,71 +1,149 @@
 import PrimParser.Base
 import PrimParser.Necessity
+import IMonad.Graded
 
 abbrev Error := String
 abbrev Text (n : Nat) := List.Vector Char n
 
-abbrev consumptionObligation (n m : Nat) : Necessity → Prop
+structure Grade where
+  errors : Necessity
+  consumes : Necessity
+
+namespace Grade
+
+def unconditional : Grade where
+  consumes := .always
+  errors := .never
+
+def conditional : Grade where
+  consumes := .always
+  errors := .possibly
+
+def sink : Grade where
+  consumes := .always
+  errors := .always
+
+def flexible : Grade where
+  consumes := .possibly
+  errors := .never
+
+def fallible : Grade where
+  consumes := .possibly
+  errors := .possibly
+
+def failing : Grade where
+  consumes := .possibly
+  errors := .always
+
+def pure : Grade where
+  consumes := .never
+  errors := .never
+
+def lookahead : Grade where
+  consumes := .never
+  errors := .possibly
+
+def brake : Grade where
+  consumes := .never
+  errors := .always
+
+instance : Monoid Grade where
+  mul a b := ⟨a.errors ⊔ b.errors, a.consumes ⊔ b.consumes⟩
+  mul_assoc a b c := by cases a; cases b; simp [HMul.hMul, Mul.mul]; grind
+  one := pure
+  one_mul a := by cases a; simp [HMul.hMul, Mul.mul, OfNat.ofNat, pure]
+  mul_one a := by cases a; simp [HMul.hMul, Mul.mul, OfNat.ofNat, pure]
+
+end Grade
+
+namespace Parser
+
+abbrev consumptionWitness (n m : Nat) : Necessity → Prop
   | .always => n < m
   | .possibly => n ≤ m
-  | .never => False
+  | .never => PUnit
 
-structure OkResult (n : Nat) (c : Necessity) (α : Type) where
+structure Result (n : Nat) (consumes : Necessity) (α : Type) where
   result : α
   restSize : Nat
-  proof : consumptionObligation restSize n c
+  witness : consumptionWitness restSize n consumes
   restText : Text restSize
 
-abbrev Parser (ε : Type) (c : Necessity) (α : Type) :=
-  ∀ {n}, Text n → ε ⊕ OkResult n c α
+abbrev Outcome (ε : Type) (n : Nat) (g : Grade) (α : Type) : Type :=
+  match g.errors with
+  | .never => Result n g.consumes α
+  | .possibly => ε ⊕ Result n g.consumes α
+  | .always => ε
+
+end Parser
+
+abbrev Parser (ε : Type) (g : Grade) (α : Type) :=
+  ∀ {n}, Text n → Parser.Outcome ε n g α
+
+namespace Parser
 
 variable
   {α ε : Type}
+  {g : Grade}
+  [Inhabited ε]
+
+instance {n c} : Functor (Result n c) where
+  map f x := {x with result := f x.result}
+
+instance {n} : GFunctor (Result n) where
+  gmap := Functor.map
+
+instance {n} : Pure (Result n 1) where
+  pure a :=
+    {result := a
+     restSize := 0
+     restText := List.Vector.nil
+     witness := .unit}
+
+instance {n} : Pure (Outcome ε n 1) where
+  pure a := (Pure.pure a : Result n 1 _)
+
+instance {n} : Functor (Outcome ε n g) where
+  map f x := match g with
+    | ⟨e, _⟩ => match e with
+     | .never => by dsimp! at x ⊢; exact f <$> x
+     | .possibly => by dsimp! at x ⊢; exact (Functor.map f) <$> x
+     | .always => x
 
 def Error.eof : Error := "eof"
 def Error.fail : Error := "fail"
 
-def token (f : Char → Option α) : Parser Error .always α := fun {n} t =>
+def token (f : Char → Option α) : Parser Error .conditional α := fun {n} t =>
   match n, t with
-  | 0, .nil => .inl .eof
+  | 0, .nil => .inl Error.eof
   | Nat.succ n, ⟨c :: cs, _⟩ => match f c with
    | .some r => .inr ⟨r, n, Nat.lt_add_one n, cs, by grind⟩
-   | .none => .inl .fail
+   | .none => .inl Error.fail
 
-def many (p : Parser ε .always α) : Parser Empty .possibly (List α) := fun {n} t =>
-  match p t with
-  | .inl _ => .inr ⟨[], n, by omega, t⟩
-  | .inr ⟨a, n', p', t'⟩ => match many p t' with
-    | .inl e => nomatch e
-    | .inr ⟨as, n'', p'', t''⟩ => .inr ⟨a :: as, n'', by omega, t''⟩
+-- TODO perhaps a generic instance of G{Functor,Applicative,Monad} for the →
+-- type is possible
+instance : GFunctor (Parser ε) where
+  gmap f p _ t := f <$> p t
 
-inductive Many1Zero where
-  | mk
+instance : GApplicative (Parser ε) where
+  gpure a _ t := pure a
+  gseq f g _n t := by
+    expose_names
+    specialize f t
+    rcases i with ⟨ie, ic⟩; rcases j with ⟨je, jc⟩
+    cases ie <;> simp [Outcome, HMul.hMul, Mul.mul] at ⊢ f
+    case always => exact f
+    case possibly => sorry
+    case never =>
+      specialize g () f.restText
+      cases je <;> simp [Outcome] at g ⊢
+      case always => exact g
+      case possibly => sorry
+      case never =>
+        exact {result := f.result g.result
+               restSize := g.restSize
+               restText := g.restText
+               witness := sorry}
 
-def many1 (p : Parser ε .always α) : Parser Many1Zero .always (List α) := fun {n} t =>
-  match p t with
-  | .inl _ => .inl .mk
-  | .inr ⟨a, n', p', t'⟩ =>
-    match many p t' with
-    | .inl e => nomatch e
-    | .inr ⟨as, n'', p'', t''⟩ => .inr ⟨a :: as, n'', by omega, t''⟩
 
-def digit : Parser Error .always (Fin 10) :=
-  let f (c : Char) : Option (Fin 10) :=
-    if h : '0'.toNat ≤ c.toNat && c.toNat ≤ '9'.toNat
-    then .some ⟨c.toNat - '0'.toNat, by grind⟩
-    else .none
-  token f
-
-def natural : Parser Error .always Nat := fun t =>
-  let f (l : List (Fin 10)) : Nat := l.foldl (fun ⟨fac, acc⟩ ⟨d, _⟩
-    => ⟨fac * 10, acc + fac * d⟩) ((1 : Nat), (0 : Nat)) |>.2
-  match many1 digit t with
-  | .inl .mk => .inl "failed to parse Nat"
-  | .inr ⟨l, x1, x2, x3⟩ => .inr ⟨f l.reverse, x1, x2, x3⟩
-
-def runParser {c} (txt : String) (p : Parser ε c α) : ε ⊕ α :=
-  let l : List Char := txt.toList
-  let v : List.Vector Char l.length := List.Vector.ofFn (fun ix => l.get ix)
-  match p v with
-  | .inl e => .inl e
-  | .inr r => .inr r.result
+end Parser

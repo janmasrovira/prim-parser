@@ -5,6 +5,8 @@ inductive Necessity where
   | always
   | never
 
+namespace Necessity
+
 instance : Max Necessity where
   max a b := match a, b with
     | .always, _ => .always
@@ -26,6 +28,12 @@ instance : LinearOrder Necessity := by
   intro x y p; cases x <;> cases y <;> cases p <;> rfl
   repeat (intro x y; cases x <;> cases y <;> rfl)
 
+instance : BoundedOrder Necessity where
+  top := .always
+  bot := .never
+  le_top a := by cases a <;> decide
+  bot_le a := by cases a <;> decide
+
 instance : SemilatticeSup Necessity where
   sup := max
   sup_le a b c := by cases a <;> cases b <;> cases c <;> decide
@@ -44,3 +52,13 @@ instance : Monoid Necessity where
   one := .never
   one_mul a := by cases a <;> decide
   mul_one a := by cases a <;> decide
+
+def complement : Necessity → Necessity
+  | .always => .never
+  | .possibly => .possibly
+  | .never => .always
+
+@[simp] theorem never_le (a : Necessity) : .never ≤ a := by cases a <;> decide
+@[simp] theorem le_always (a : Necessity) : a ≤ .always := by cases a <;> decide
+
+end Necessity
