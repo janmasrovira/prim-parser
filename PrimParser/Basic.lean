@@ -61,7 +61,7 @@ namespace Parser
 abbrev consumptionWitness (n m : Nat) : Necessity → Prop
   | .always => n < m
   | .possibly => n ≤ m
-  | .never => PUnit
+  | .never => n = m
 
 structure Result (n : Nat) (consumes : Necessity) (α : Type) where
   result : α
@@ -93,16 +93,6 @@ instance {n c} : Functor (Result n c) where
 instance {n} : GFunctor (Result n) where
   gmap := Functor.map
 
-instance {n} : Pure (Result n 1) where
-  pure a :=
-    {result := a
-     restSize := 0
-     restText := List.Vector.nil
-     witness := .unit}
-
-instance {n} : Pure (Outcome ε n 1) where
-  pure a := (Pure.pure a : Result n 1 _)
-
 instance {n} : Functor (Outcome ε n g) where
   map f x := match g with
     | ⟨e, _⟩ => match e with
@@ -122,28 +112,53 @@ def token (f : Char → Option α) : Parser Error .conditional α := fun {n} t =
 
 -- TODO perhaps a generic instance of G{Functor,Applicative,Monad} for the →
 -- type is possible
+def Result.seq {α β : Type} {n : Nat} {ic jc : Necessity}
+    (r1 : Result n ic (α → β)) (r2 : Result r1.restSize jc α)
+    : Result n (ic ⊔ jc) β where
+  result := r1.result r2.result
+  restSize := r2.restSize
+  restText := r2.restText
+  witness := by
+    have w1 := r1.witness
+    have w2 := r2.witness
+    cases ic <;> cases jc <;> simp_all [consumptionWitness] <;> omega
+
 instance : GFunctor (Parser ε) where
   gmap f p _ t := f <$> p t
 
 instance : GApplicative (Parser ε) where
-  gpure a _ t := pure a
+  gpure a _ t := ⟨a, _, rfl, t⟩
   gseq f g _n t := by
     expose_names
     specialize f t
     rcases i with ⟨ie, ic⟩; rcases j with ⟨je, jc⟩
     cases ie <;> simp [Outcome, HMul.hMul, Mul.mul] at ⊢ f
     case always => exact f
-    case possibly => sorry
+    case possibly =>
+      cases je <;> simp at ⊢
+      case always =>
+        rcases f with e | r
+        · exact e
+        · exact g () r.restText
+      case possibly =>
+        rcases f with e | r
+        · exact .inl e
+        · rcases g () r.restText with e | r2
+          · exact .inl e
+          · exact .inr (r.seq r2)
+      case never =>
+        rcases f with e | r
+        · exact .inl e
+        · exact .inr (r.seq (g () r.restText))
     case never =>
       specialize g () f.restText
       cases je <;> simp [Outcome] at g ⊢
       case always => exact g
-      case possibly => sorry
-      case never =>
-        exact {result := f.result g.result
-               restSize := g.restSize
-               restText := g.restText
-               witness := sorry}
+      case possibly =>
+        rcases g with e | r
+        · exact .inl e
+        · exact .inr (f.seq r)
+      case never => exact f.seq g
 
 
 end Parser
