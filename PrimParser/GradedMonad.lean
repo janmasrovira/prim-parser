@@ -18,21 +18,7 @@ class GMonad (m : GradedType G) extends GApplicative m where
 syntax (name := gdoNotation) "gdo " doSeq : term
 
 open Lean in
-private def expandGDoElem (elem : Syntax) (rest : TSyntax `term) :
-    MacroM (TSyntax `term) :=
-  match elem with
-  | `(doElem| let $x:ident ← $e:term) => `(GMonad.gbind $e fun $x => $rest)
-  | `(doElem| let $x:ident : $ty:term ← $e:term) => `(GMonad.gbind $e fun ($x : $ty) => $rest)
-  | `(doElem| let $x:ident := $e:term) => `(let $x := $e; $rest)
-  | `(doElem| let $x:ident : $ty:term := $e:term) => `(let $x : $ty := $e; $rest)
-  | _ =>
-    -- bare expression (doExpr): bind and discard result
-    let e : TSyntax `term := ⟨elem.getArgs.back!⟩
-    `(GMonad.gbind $e fun _ => $rest)
-
-open Lean in
-@[macro gdoNotation] def expandGDo : Macro := fun stx => do
-  let doSeq := stx[1]
+private partial def expandGDoBlock (doSeq : Syntax) : MacroM (TSyntax `term) := do
   let itemsNode := if doSeq.getKind == ``Lean.Parser.Term.doSeqIndent then
     doSeq[0]
   else
@@ -40,17 +26,53 @@ open Lean in
   let elems := (itemsNode.getArgs.map fun item => item[0]).filter (!·.isMissing)
   if elems.isEmpty then
     Macro.throwError "empty gdo block"
-  else
-    let last := elems.back!
-    let init := elems.pop
-    let r ← match last with
-      | `(doElem| return $e:term) => `(GApplicative.gpure $e)
-      | `(doElem| return) => `(GApplicative.gpure ())
-      | _ => pure (⟨last.getArgs.back!⟩ : TSyntax `term)
-    let mut result := r
-    for i in List.range init.size |>.reverse do
-      result ← expandGDoElem init[i]! result
-    return result
+  let last := elems.back!
+  let init := elems.pop
+  let r ← expandGDoFinal last
+  let mut result := r
+  for i in List.range init.size |>.reverse do
+    result ← expandGDoElem init[i]! result
+  return result
+where
+  expandGDoElem (elem : Syntax) (rest : TSyntax `term) : MacroM (TSyntax `term) :=
+    match elem with
+    | `(doElem| let $x:ident ← $e:term) => `(GMonad.gbind $e fun $x => $rest)
+    | `(doElem| let $x:ident : $ty:term ← $e:term) => `(GMonad.gbind $e fun ($x : $ty) => $rest)
+    | `(doElem| let $x:ident := $e:term) => `(let $x := $e; $rest)
+    | `(doElem| let $x:ident : $ty:term := $e:term) => `(let $x : $ty := $e; $rest)
+    | _ =>
+      if elem.isOfKind ``Lean.Parser.Term.doMatch then do
+        let matchTerm ← expandDoMatch elem
+        `(GMonad.gbind $matchTerm fun _ => $rest)
+      else
+        let e : TSyntax `term := ⟨elem.getArgs.back!⟩
+        `(GMonad.gbind $e fun _ => $rest)
+  expandGDoFinal (elem : Syntax) : MacroM (TSyntax `term) := do
+    match elem with
+    | `(doElem| return $e:term) => `(GApplicative.gpure $e)
+    | `(doElem| return) => `(GApplicative.gpure ())
+    | _ =>
+      if elem.isOfKind ``Lean.Parser.Term.doMatch then
+        expandDoMatch elem
+      else
+        pure ⟨elem.getArgs.back!⟩
+  expandDoMatch (node : Syntax) : MacroM (TSyntax `term) := do
+    let processed ← replaceDoSeqs node
+    return ⟨match processed with
+      | .node info _ args => .node info ``Lean.Parser.Term.match args
+      | other => other⟩
+  replaceDoSeqs (node : Syntax) : MacroM Syntax := do
+    if node.getKind == ``Lean.Parser.Term.doSeqIndent ||
+       node.getKind == `Lean.Parser.Term.doSeqBrack then
+      return (← expandGDoBlock node).raw
+    let newArgs ← node.getArgs.mapM fun child => do
+      if child.isAtom || child.isMissing then return child
+      else replaceDoSeqs child
+    return node.setArgs newArgs
+
+open Lean in
+@[macro gdoNotation] def expandGDo : Macro := fun stx => do
+  expandGDoBlock stx[1]
 
 section GDoExamples
 
@@ -81,5 +103,19 @@ example (x : M i Nat) : M (i * 1) Nat :=
   gdo
     let a ← x
     return a + 1
+
+example (x : M i (Option α)) (f : α → M j β) (e : M j β) : M (i * j) β :=
+  gdo
+    let a ← x
+    match a with
+    | .some b => f b
+    | .none => e
+
+example (x : M i (Option Nat)) : M (i * 1) Nat :=
+  gdo
+    let a ← x
+    match a with
+    | .some n => return n
+    | .none => return 0
 
 end GDoExamples
