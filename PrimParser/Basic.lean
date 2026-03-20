@@ -1,6 +1,6 @@
 import PrimParser.Base
 import PrimParser.Necessity
-import IMonad.Graded
+import PrimParser.GradedMonad
 
 abbrev Error := String
 abbrev Text (n : Nat) := List.Vector Char n
