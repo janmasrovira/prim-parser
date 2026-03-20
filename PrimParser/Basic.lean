@@ -83,9 +83,8 @@ abbrev Parser (ε : Type) (g : Grade) (α : Type) :=
 namespace Parser
 
 variable
-  {α ε : Type}
-  {g : Grade}
-  [Inhabited ε]
+  {α β ε : Type}
+  {g g' : Grade}
 
 instance {n c} : Functor (Result n c) where
   map f x := {x with result := f x.result}
@@ -112,7 +111,7 @@ def token (f : Char → Option α) : Parser Error .conditional α := fun {n} t =
 
 -- TODO perhaps a generic instance of G{Functor,Applicative,Monad} for the →
 -- type is possible
-def Result.seq {α β : Type} {n : Nat} {ic jc : Necessity}
+def Result.ap {α β : Type} {n : Nat} {ic jc : Necessity}
     (r1 : Result n ic (α → β)) (r2 : Result r1.restSize jc α)
     : Result n (ic ⊔ jc) β where
   result := r1.result r2.result
@@ -123,42 +122,69 @@ def Result.seq {α β : Type} {n : Nat} {ic jc : Necessity}
     have w2 := r2.witness
     cases ic <;> cases jc <;> simp_all [consumptionWitness] <;> omega
 
+def Result.ap' {α β : Type} {n : Nat} {ic jc : Necessity}
+    (r1 : Result n ic α) (r2 : Result r1.restSize jc (α → β))
+    : Result n (ic ⊔ jc) β where
+  result := r2.result r1.result
+  restSize := r2.restSize
+  restText := r2.restText
+  witness := by
+    have w1 := r1.witness
+    have w2 := r2.witness
+    cases ic <;> cases jc <;> simp_all [consumptionWitness] <;> omega
+
+def Result.seq {α β : Type} {n : Nat} {ic jc : Necessity}
+    (r1 : Result n ic α) (r2 : Result r1.restSize jc β)
+    : Result n (ic * jc) β where
+  result := r2.result
+  restSize := r2.restSize
+  restText := r2.restText
+  witness := by
+    have w1 := r1.witness
+    have w2 := r2.witness
+    cases ic <;> cases jc <;> simp_all [consumptionWitness] <;> omega
+
+def Result.bindParser {α β ε : Type} {n : Nat} {xc fe fc : Necessity}
+    (x : Result n xc α) (f : α → Parser ε ⟨fe, fc⟩ β)
+    : Outcome ε n ⟨fe, xc * fc⟩ β :=
+  match fe with
+  | .always => f x.result x.restText
+  | .never => x.seq (f x.result x.restText)
+  | .possibly => match f x.result x.restText with
+    | .inr y => .inr (x.seq y)
+    | .inl e => .inl e
+
 instance : GFunctor (Parser ε) where
   gmap f p _ t := f <$> p t
 
-instance : GApplicative (Parser ε) where
-  gpure a _ t := ⟨a, _, rfl, t⟩
-  gseq f g _n t := by
-    expose_names
-    specialize f t
-    rcases i with ⟨ie, ic⟩; rcases j with ⟨je, jc⟩
-    cases ie <;> simp [Outcome, HMul.hMul, Mul.mul] at ⊢ f
-    case always => exact f
-    case possibly =>
-      cases je <;> simp at ⊢
-      case always =>
-        rcases f with e | r
-        · exact e
-        · exact g () r.restText
-      case possibly =>
-        rcases f with e | r
-        · exact .inl e
-        · rcases g () r.restText with e | r2
-          · exact .inl e
-          · exact .inr (r.seq r2)
-      case never =>
-        rcases f with e | r
-        · exact .inl e
-        · exact .inr (r.seq (g () r.restText))
-    case never =>
-      specialize g () f.restText
-      cases je <;> simp [Outcome] at g ⊢
-      case always => exact g
-      case possibly =>
-        rcases g with e | r
-        · exact .inl e
-        · exact .inr (f.seq r)
-      case never => exact f.seq g
+def Outcome.throw {n} (e : ε) (i : .possibly ≤ g.errors := by simp) : Outcome ε n g α := by
+  rcases g with ⟨g1, g2⟩
+  match h : g1 with
+  | .possibly => exact .inl e
+  | .always => exact e
+  | .never => contradiction
 
+def bind (m : Parser ε g α) (f : α → Parser ε g' β) : Parser ε (g * g') β :=
+  fun t => by
+  rcases g with ⟨ge, gc⟩; rcases g' with ⟨ge', gc'⟩
+  have x := m t
+  exact match ge with
+  | .always => x
+  | .never => x.bindParser f
+  | .possibly => match x with
+    | .inl e => Outcome.throw (g := ⟨max .possibly _, _⟩) e
+    | .inr x' => match ge' with
+      | .always => x'.bindParser f
+      | .never => .inr (x'.bindParser f)
+      | .possibly => x'.bindParser f
+
+instance : GApplicative (Parser ε) where
+  gpure a _ t := {result := a
+                  restSize := _
+                  witness := rfl
+                  restText := t}
+  gseq f g _n t := sorry
+
+-- instance : GMonad (Parser ε) where
 
 end Parser
