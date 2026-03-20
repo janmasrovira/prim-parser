@@ -102,6 +102,7 @@ instance {n} : Functor (Outcome ε n g) where
 def Error.eof : Error := "eof"
 def Error.fail : Error := "fail"
 
+-- TODO move out
 def token (f : Char → Option α) : Parser Error .conditional α := fun {n} t =>
   match n, t with
   | 0, .nil => .inl Error.eof
@@ -155,7 +156,7 @@ def Result.bindParser {α β ε : Type} {n : Nat} {xc fe fc : Necessity}
     | .inl e => .inl e
 
 instance : GFunctor (Parser ε) where
-  gmap f p _ t := f <$> p t
+  gmap f p := fun t => f <$> p t
 
 def Outcome.throw {n} (e : ε) (i : .possibly ≤ g.errors := by simp) : Outcome ε n g α := by
   rcases g with ⟨g1, g2⟩
@@ -179,11 +180,8 @@ def bind (m : Parser ε g α) (f : α → Parser ε g' β) : Parser ε (g * g') 
       | .possibly => x'.bindParser f
 
 instance : GApplicative (Parser ε) where
-  gpure a _ t := {result := a
-                  restSize := _
-                  witness := rfl
-                  restText := t}
-  gseq f g := bind f fun f' _ t => f' <$> g () t
+  gpure a := fun t => Result.mk a _ rfl t
+  gseq f g := bind f fun f' => fun t => f' <$> g () t
 
 instance : GMonad (Parser ε) where
   gbind := bind
