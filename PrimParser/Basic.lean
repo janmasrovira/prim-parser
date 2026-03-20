@@ -183,8 +183,9 @@ instance : GApplicative (Parser ε) where
                   restSize := _
                   witness := rfl
                   restText := t}
-  gseq f g _n t := sorry
+  gseq f g := bind f fun f' _ t => f' <$> g () t
 
--- instance : GMonad (Parser ε) where
+instance : GMonad (Parser ε) where
+  gbind := bind
 
 end Parser
