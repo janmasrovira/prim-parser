@@ -58,7 +58,11 @@ def complement : Necessity → Necessity
   | .possibly => .possibly
   | .never => .always
 
-@[simp] theorem never_le (a : Necessity) : .never ≤ a := by cases a <;> decide
-@[simp] theorem le_always (a : Necessity) : a ≤ .always := by cases a <;> decide
+@[simp] theorem complement_always : always.complement = never := by decide
+@[simp] theorem complement_possibly : possibly.complement = possibly := by decide
+@[simp] theorem complement_never : never.complement = always := by decide
+
+@[simp] theorem never_le (a : Necessity) : never ≤ a := by cases a <;> decide
+@[simp] theorem le_always (a : Necessity) : a ≤ always := by cases a <;> decide
 
 end Necessity

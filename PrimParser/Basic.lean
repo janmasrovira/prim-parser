@@ -63,11 +63,15 @@ abbrev consumptionWitness (n m : Nat) : Necessity → Prop
   | .possibly => n ≤ m
   | .never => n = m
 
+@[simp] theorem consumptionWitness.rfl {n g} : g ≤ .possibly → consumptionWitness n n g := by
+  intro _; cases g <;> try simp
+  contradiction
+
 structure Result (n : Nat) (consumes : Necessity) (α : Type) where
   result : α
-  restSize : Nat
-  witness : consumptionWitness restSize n consumes
+  {restSize : Nat}
   restText : Text restSize
+  witness : consumptionWitness restSize n consumes := by simp
 
 abbrev Outcome (ε : Type) (n : Nat) (g : Grade) (α : Type) : Type :=
   match g.errors with
@@ -85,7 +89,8 @@ namespace Parser
 variable
   {α β ε : Type}
   {g g' : Grade}
-  {ge : Necessity}
+  {ge : Necessity} -- used for `errors`
+  {gc : Necessity} -- used for `consumes`
 
 instance {n c} : Functor (Result n c) where
   map f x := {x with result := f x.result}
@@ -151,7 +156,7 @@ def Result.bindParser {α β ε : Type} {n : Nat} {xc fe fc : Necessity}
 instance : GFunctor (Parser ε) where
   gmap f p := ⟨fun t => f <$> p.run t⟩
 
-def Outcome.throw {n} (e : ε) (i : .possibly ≤ g.errors := by simp) : Outcome ε n g α := by
+def Outcome.throw {n} (e : ε) (c : .possibly ≤ g.errors := by simp) : Outcome ε n g α := by
   rcases g with ⟨g1, g2⟩
   match h : g1 with
   | .possibly => exact .inl e
@@ -173,7 +178,7 @@ def bind (m : Parser ε g α) (f : α → Parser ε g' β) : Parser ε (g * g') 
       | .possibly => x'.bindParser f⟩
 
 instance : GApplicative (Parser ε) where
-  gpure a := ⟨fun t => Result.mk a _ rfl t⟩
+  gpure a := ⟨fun t => ⟨a, t, rfl⟩⟩
   gseq f g := bind f fun f' => ⟨fun t => f' <$> (g ()).run t⟩
 
 instance : GMonad (Parser ε) where
@@ -181,34 +186,45 @@ instance : GMonad (Parser ε) where
 
 namespace Combinator
 
-def char : Parser Error .conditional Char := ⟨fun {n} t =>
-  match n, t with
-  | 0, .nil => .inl Error.eof
-  | Nat.succ n, ⟨c :: cs, _⟩ =>
-   .inr ⟨c, n, Nat.lt_add_one n, cs, by grind⟩⟩
+def char : Parser Error .conditional Char where
+  run {n} t :=
+    match n, t with
+    | 0, .nil => .inl Error.eof
+    | Nat.succ n, ⟨c :: cs, p⟩ =>
+      .inr {result := c
+            restSize := n
+            restText := by refine ⟨cs, by simpa [List.length_cons] using p⟩
+            witness := by simp}
 
-def throw (e : ε) (c : .possibly ≤ g.errors := by simp) : Parser ε g α :=
-  ⟨fun _ => Outcome.throw (i := c) e⟩
+def throw (e : ε) (c : .possibly ≤ g.errors := by simp) : Parser ε g α where
+  run _ := Outcome.throw (c := c) e
 
-def ret (a : α) (c : ge ≤ .possibly := by simp) : Parser ε ⟨ge, .never⟩ α :=
-  by
-  constructor
-  intro n t
-  cases ge <;> (simp [Outcome]; try contradiction)
-  · right; exact {result := a
-                  restSize := n
-                  restText := t
-                  witness := rfl}
-  · exact {result := a
-           restSize := n
-           restText := t
-           witness := rfl}
+def weakenErrors (p : Parser ε ⟨.never, gc⟩ α) : Parser ε ⟨.possibly, gc⟩ α where
+  run t := .inr (p.run t)
+
+-- Like `gpure` (consumes = .never) but with errors = .possibly instead of .never.
+-- This allows `ok` to unify with fallible parsers (e.g. `throw`) in match branches
+def ok (a : α) : Parser ε ⟨.possibly, .never⟩ α := weakenErrors (gpure a)
 
 def token (f : Char → Option α) : Parser Error .conditional α := gdo
   let c ← char
   match f c with
-  | .some r => ret r (ge := .possibly)
+  | .some r => ok r
   | .none => throw Error.fail
+
+def tryP (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨.never, (ge.complement ⊔ .possibly) ⊓ gc⟩ (Option α) where
+  run t := match ge with
+    | .never => .some <$> p.run t
+    | .always => sorry
+    | .possibly => match p.run t with
+                   | .inl _ => {result := .none, restSize := _, restText := t}
+                   | .inr _ => sorry
+    -- | .never => sorry
+-- def many (p : Parser ε ⟨ge, .always⟩ α) : Parser ε ⟨.never, gc⟩ (List α) where
+--   run t :=
+--     match p.run t with
+--     | .inl _ => gpure []
+
 
 end Combinator
 

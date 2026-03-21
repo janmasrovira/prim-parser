@@ -15,6 +15,10 @@ class GApplicative (f : GradedType G) extends GFunctor f where
 class GMonad (m : GradedType G) extends GApplicative m where
   gbind {i j α β} : m i α → (α → m j β) → m (i * j) β
 
+export GFunctor (gmap)
+export GApplicative (gpure gseq)
+export GMonad (gbind)
+
 syntax (name := gdoNotation) "gdo " doSeq : term
 
 open Lean in
