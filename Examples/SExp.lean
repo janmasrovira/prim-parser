@@ -14,10 +14,8 @@ private def listToPairs : List SExp → SExp
   | x :: xs => .pair x (listToPairs xs)
   | [] => .atom ""
 
-private def isAtomChar (c : Char) : Bool := c.isAlphanum
-
 def patom : Parser Error .conditional SExp :=
-  .atom <$>ᵍ takeWhile1 isAtomChar
+  .atom <$>ᵍ takeWhile1 (·.isAlphanum)
 
 def sexp : Parser Error .conditional SExp :=
   fix (fun sexp_rec =>
