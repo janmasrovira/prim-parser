@@ -1,0 +1,17 @@
+* prim-parser - Total Parser Combinators with do notation
+Parser combinator library in Lean 4 with *graded monads*. Each parser carries a
+~Grade~ tracking whether it /always/, /possibly/, or /never/ errors and consumes
+input. Grades guarantee that parsers are total.
+
+The graded monad laws (~LawfulGMonad~) are proven for ~Parser~.
+
+** Structure
+- ~PrimParser/~ -- library: ~Grade~, ~Parser~, combinators, graded monad typeclasses, ~gdo~ notation
+- ~Examples/~ -- example parsers
+- ~Tests/~ -- ~#guard~-based compile-time tests
+
+** Build
+#+begin_src sh
+lake build           # library
+lake build Tests     # tests
+#+end_src
