@@ -57,6 +57,14 @@ instance : Monoid Grade where
 instance : Zero Grade where
   zero := empty
 
+variable (e1 e2 c1 c2 : Necessity)
+
+@[simp] theorem mul_mk : (⟨e1, c1⟩ : Grade) * ⟨e2, c2⟩ = ⟨e1 ⊔ e2, c1 ⊔ c2⟩ := by
+  simp [HMul.hMul, Mul.mul]
+
+@[simp] theorem one_mk : (1 : Grade) = ⟨.never, .never⟩ := by
+  simp [OfNat.ofNat, One.one]
+
 def choice (a b : Grade) : Grade where
   errors := a.errors ⊓ b.errors
   consumes := a.errors.ite b.consumes a.consumes
@@ -435,7 +443,6 @@ instance : LawfulGApplicative (Parser ε) where
       congr 1
       · grind
       · simp [HMul.hMul, Mul.mul]
-        simp [max]
         cases ge2 <;> simp
         · case possibly =>
           refine Function.hfunext rfl ?_; intro _ _ .rfl
@@ -635,7 +642,7 @@ def optionalBind
   optional (gdo
     let a ← p
     cont a
-    grade_by by simp [HMul.hMul, Mul.mul])
+    grade_by by simp)
 
 private def manyTillGo
   (p : Parser ε ⟨ge, .always⟩ α)
@@ -685,7 +692,7 @@ def many1 (p : Parser ε ⟨ge, .always⟩ α) : Parser ε ⟨ge, .always⟩ (Li
   let x ← p
   let xs ← many p
   return (x :: xs)
-  grade_by by simp [HMul.hMul, Mul.mul, OfNat.ofNat, One.one]
+  grade_by by simp
 
 def takeWhile (f : Char → Bool) : Parser Error .flexible String :=
   String.ofList <$>ᵍ many (satisfy f)
@@ -709,7 +716,7 @@ def lexeme (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge, gc ⊔ .poss
   let r ← p
   whitespace
   return r
-  grade_by by simp [HMul.hMul, Mul.mul, OfNat.ofNat, One.one]
+  grade_by by simp
 
 def digit : Parser Error .conditional Nat :=
   token fun c => if c.isDigit then some (c.toNat - '0'.toNat) else none
@@ -718,7 +725,7 @@ def nat : Parser Error .conditional Nat := gdo
   let d ← digit
   let ds ← many digit
   return ds.foldl (fun acc d => acc * 10 + d) d
-  grade_by by simp [HMul.hMul, Mul.mul, OfNat.ofNat, One.one]
+  grade_by by simp
 
 def sepBy
   (p : Parser ε ⟨ge, gc⟩ α)
@@ -730,11 +737,11 @@ def sepBy
   | .some f =>
     let item : Parser ε ⟨ge' ⊔ ge, .always⟩ α := gdo
         sep; p
-        grade_by by simp [HMul.hMul, Mul.mul, h]
+        grade_by by simp [h]
     let rest ← many item
     ok (gc := .possibly) (f :: rest)
   | .none => ok (ge := .never) []
-  grade_by by simp [HMul.hMul, Mul.mul]
+  grade_by by simp
               cases ge <;> cases gc <;> simp
               have := IsEmpty.false p; contradiction
 
@@ -748,7 +755,7 @@ def chainl1
     let y ← p
     return (f, y))
   return rest.foldl (fun acc ⟨f, y⟩ => f acc y) x
-  grade_by by simp [HMul.hMul, Mul.mul, OfNat.ofNat, One.one]
+  grade_by by simp
 
 def fix [Inhabited ε]
   (f : Parser ε ⟨ge, .always⟩ α → Parser ε ⟨ge, .always⟩ α)

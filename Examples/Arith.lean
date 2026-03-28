@@ -39,7 +39,7 @@ def expr : Parser Error .conditional Expr :=
       let e ← expr_rec
       lchar ')'
       return e
-      grade_by by simp [HMul.hMul, Mul.mul, OfNat.ofNat, One.one]
+      grade_by by simp
     let atom := choice (Expr.lit <$>ᵍ lexeme nat) parens
     let term := chainl1 atom mulOp
     chainl1 term addOp)

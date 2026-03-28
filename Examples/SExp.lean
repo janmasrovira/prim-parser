@@ -27,7 +27,7 @@ def sexp : Parser Error .conditional SExp :=
       let rest ← many (gdo whitespace; sexp_rec)
       lexeme (char ')')
       return listToPairs (first :: rest)
-      grade_by by simp [HMul.hMul, Mul.mul, OfNat.ofNat, One.one]
+      grade_by by simp
     choice patom plist)
 
 end SExp
