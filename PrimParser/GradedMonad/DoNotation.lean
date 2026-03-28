@@ -35,6 +35,7 @@ where
   expandGDoElem (elem : Syntax) (rest : TSyntax `term) : MacroM (TSyntax `term) :=
     match elem with
     | `(doElem| let $x:ident ← $e:term) => `(GMonad.gbind $e fun $x => $rest)
+    | `(doElem| let _ ← $e:term) => `(GMonad.gbind $e fun _ => $rest)
     | `(doElem| let $x:ident : $ty:term ← $e:term) => `(GMonad.gbind $e fun ($x : $ty) => $rest)
     | `(doElem| let $x:ident := $e:term) => `(let $x := $e; $rest)
     | `(doElem| let $x:ident : $ty:term := $e:term) => `(let $x : $ty := $e; $rest)
@@ -121,5 +122,10 @@ example (x : M i α) : M i α :=
     let a ← x
     return a
     grade_by by simp
+
+example (x : M i α) (y : M j β) : M (i * j) β :=
+  gdo
+    let _ ← x
+    y
 
 end GDoExamples

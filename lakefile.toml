@@ -10,6 +10,12 @@ autoImplicit = false
 [[lean_lib]]
 name = "PrimParser"
 
+[[lean_lib]]
+name = "Examples"
+
+[[lean_lib]]
+name = "Tests"
+
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"

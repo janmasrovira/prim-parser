@@ -4,6 +4,7 @@ inductive Necessity where
   | possibly
   | always
   | never
+  deriving Repr
 
 namespace Necessity
 
@@ -58,6 +59,9 @@ def complement : Necessity → Necessity
   | .possibly => .possibly
   | .never => .always
 
+instance : Complement Necessity where
+  complement := complement
+
 variable
   (a b : Necessity)
 
@@ -75,5 +79,7 @@ abbrev ite (sel a b : Necessity) : Necessity := (a ⊓ b) ⊔ sel ⊓ a ⊔ sel.
 @[simp] theorem ite_never : never.ite a b = b := by simp
 @[simp] theorem ite_possibly : possibly.ite a b = (a ⊓ b) ⊔ possibly ⊓ (a ⊔ b) := by
   cases a <;> cases b <;> simp
+@[simp] theorem ite_idem : a.ite a a = a := by
+  cases a <;> simp
 
 end Necessity

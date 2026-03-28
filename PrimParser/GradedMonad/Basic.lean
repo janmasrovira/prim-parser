@@ -15,7 +15,7 @@ class GApplicative (f : GradedType G) extends GFunctor f where
 class GMonad (m : GradedType G) extends GApplicative m where
   gbind {i j α β} : m i α → (α → m j β) → m (i * j) β
 
-class GAlternative [AddMonoid G] (f : GradedType G) extends GApplicative f where
+class GAlternative [AddSemigroup G] [Zero G] (f : GradedType G) extends GApplicative f where
   gempty {α} : f 0 α
   gchoice {α} {i j} : f i α → f j α → f (i + j) α
 
