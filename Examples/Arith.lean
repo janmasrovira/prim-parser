@@ -20,18 +20,16 @@ def eval : Expr → Int
   | .div l r => l.eval / r.eval
 
 private def addOp : Parser Error .conditional (Expr → Expr → Expr) :=
-  choice
-    ((fun _ => Expr.add) <$>ᵍ lexeme (char '+'))
-    ((fun _ => Expr.sub) <$>ᵍ lexeme (char '-'))
+  (fun _ => Expr.add) <$>ᵍ lexeme (char '+')
+  <|> (fun _ => Expr.sub) <$>ᵍ lexeme (char '-')
 
 private def mulOp : Parser Error .conditional (Expr → Expr → Expr) :=
-  choice
-    ((fun _ => Expr.mul) <$>ᵍ lexeme (char '*'))
-    ((fun _ => Expr.div) <$>ᵍ lexeme (char '/'))
+  (fun _ => Expr.mul) <$>ᵍ lexeme (char '*')
+  <|> (fun _ => Expr.div) <$>ᵍ lexeme (char '/')
 
 def expr : Parser Error .conditional Expr :=
   fix (fun expr_rec =>
-    let atom := choice (Expr.lit <$>ᵍ lexeme nat) (parens expr_rec)
+    let atom := Expr.lit <$>ᵍ lexeme nat <|> parens expr_rec
     let term := chainl1 mulOp atom
     chainl1 addOp term)
 

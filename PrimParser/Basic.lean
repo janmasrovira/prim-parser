@@ -547,6 +547,8 @@ def choice
         | .never => r'
         | .possibly | .always => .inr r'
 
+infixl:20 " <|> " => choice
+
 def oneOf (l : List (Parser ε g α)) (p : l.length ≠ 0 := by simp) : Parser ε g α := match l with
   | [] => nomatch p
   | [x] => x

@@ -16,7 +16,7 @@ private def ident : Parser Error .conditional String :=
 
 def term : Parser Error .conditional Term :=
   fix (fun term_rec =>
-    let atom := choice (var <$>ᵍ ident) (parens term_rec)
+    let atom := var <$>ᵍ ident <|> parens term_rec
     let appTerm : Parser Error .conditional Term := gdo
       let f ← atom
       let args ← many atom
@@ -29,6 +29,6 @@ def term : Parser Error .conditional Term :=
       let body ← term_rec
       return lam x body
       grade_by by simp
-    choice lamTerm appTerm)
+    lamTerm <|> appTerm)
 
 end Term

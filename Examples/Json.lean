@@ -23,9 +23,8 @@ private def jnull : Parser Error .conditional Json :=
   (fun _ => .null) <$>ᵍ keyword "null"
 
 private def jbool : Parser Error .conditional Json :=
-  choice
-    ((fun _ => .bool true) <$>ᵍ keyword "true")
-    ((fun _ => .bool false) <$>ᵍ keyword "false")
+  (fun _ => Json.bool true) <$>ᵍ keyword "true"
+  <|> (fun _ => Json.bool false) <$>ᵍ keyword "false"
 
 private def jnum : Parser Error .conditional Json :=
   .num <$>ᵍ lexeme nat

@@ -41,7 +41,7 @@ private def escapedQuote : Parser Error .conditional Char := gdo
 
 private def quotedField : Parser Error .conditional String := gdo
   dquote
-  let cs ← many (choice escapedQuote (satisfy (· != '\"')))
+  let cs ← many (escapedQuote <|> satisfy (· != '\"'))
   dquote
   return String.ofList cs
   grade_by by simp
@@ -50,7 +50,7 @@ private def unquotedField : Parser Error .flexible String :=
   takeWhile (fun c => c != ',' && c != '\"' && c != '\n')
 
 private def field : Parser Error .flexible String :=
-  choice quotedField unquotedField
+  quotedField <|> unquotedField
 
 private def int : Parser Error .conditional Int := gdo
   let neg ← optional (char '-')
@@ -59,14 +59,14 @@ private def int : Parser Error .conditional Int := gdo
   grade_by by simp
 
 private def value : Parser Error .flexible Value :=
-  choice (.int <$>ᵍ int) (.str <$>ᵍ unquotedField)
+  .int <$>ᵍ int <|> .str <$>ᵍ unquotedField
 
 private def quotedValue : Parser Error .conditional Value := gdo
   let s ← quotedField
   return .str s
 
 private def cell : Parser Error .flexible Value :=
-  choice quotedValue value
+  quotedValue <|> value
 
 def row : Parser Error .flexible (List String) :=
   sepBy comma field
