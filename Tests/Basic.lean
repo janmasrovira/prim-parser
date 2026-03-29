@@ -57,6 +57,13 @@ def toText (s : String) : Text s.toList.length := ⟨s.toList, rfl⟩
 #guard nat.runResult? (toText "123") == some 123
 #guard nat.runResult? (toText "x") == none
 
+-- int
+#guard int.runResult? (toText "42") == some 42
+#guard int.runResult? (toText "-7") == some (-7)
+#guard int.runResult? (toText "-0") == some 0
+#guard int.runResult? (toText "x") == none
+#guard int.runResult? (toText "-x") == none
+
 -- chainl1
 private def plus : Parser Error .conditional (Nat → Nat → Nat) := gdo
   let _ ← satisfy (· == '+')

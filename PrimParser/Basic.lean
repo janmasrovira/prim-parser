@@ -754,6 +754,12 @@ def nat : Parser Error .conditional Nat := gdo
   return ds.foldl (fun acc d => acc * 10 + d) d
   grade_by by simp
 
+def int : Parser Error .conditional Int := gdo
+  let neg ← optional (char '-')
+  let n ← nat
+  return if neg.isSome then -n else n
+  grade_by by simp
+
 def sepBy
   (sep : Parser ε ⟨ge', gc'⟩ β)
   (p : Parser ε ⟨ge, gc⟩ α)
