@@ -556,22 +556,49 @@ def oneOf (l : List (Parser ε g α)) (p : l.length ≠ 0 := by simp) : Parser �
 def throw (e : ε) (c : .possibly ≤ ge := by simp) : Parser ε ⟨ge, gc⟩ α where
   run _ := Outcome.throw (h := c) e
 
+-- relax: cap at .possibly via ⊓ .possibly (preserves .never, softens .always → .possibly)
+
+def Success.relaxConsumes (p : Success n gc α) : Success n (gc ⊓ .possibly) α :=
+  match gc with
+  | .never => p
+  | .possibly => p
+  | .always => { p with witness := le_of_lt p.witness }
+
+def relaxConsumes (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge, gc ⊓ .possibly⟩ α where
+  run t :=
+    (p.run t).handle
+      (fun h e => Outcome.throw (h := h) e)
+      (fun h r => Outcome.ofSuccess (c := h) r.relaxConsumes)
+
+def relaxErrors (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge ⊓ .possibly, gc⟩ α where
+  run t :=
+    (p.run t).handle
+      (fun h e => Outcome.throw (h := le_inf h le_rfl) e)
+      (fun _ r => Outcome.ofSuccess (c := inf_le_right) r)
+
+def relax (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge ⊓ .possibly, gc ⊓ .possibly⟩ α :=
+  p.relaxErrors.relaxConsumes
+
 def Success.weakenConsumes (p : Success n gc α) : Success n .possibly α :=
   match gc with
   | .never => { p with witness := le_of_eq p.witness }
   | .possibly => p
   | .always => { p with witness := le_of_lt p.witness }
 
-def Outcome.weakenConsumes (p : Outcome ε n ⟨ge, gc⟩ α) : Outcome ε n ⟨ge, .possibly⟩ α :=
-  p.handle
-    (fun h e => Outcome.throw (h := h) e)
-    (fun h r => Outcome.ofSuccess (c := h) r.weakenConsumes)
-
 def weakenConsumes (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge, .possibly⟩ α where
-  run t := p.run t |>.weakenConsumes
+  run t :=
+    (p.run t).handle
+      (fun h e => Outcome.throw (h := h) e)
+      (fun h r => Outcome.ofSuccess (c := h) r.weakenConsumes)
 
-def weakenErrors (p : Parser ε ⟨.never, gc⟩ α) : Parser ε ⟨.possibly, gc⟩ α where
-  run t := .inr (p.run t)
+def weakenErrors (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨.possibly, gc⟩ α where
+  run t :=
+    (p.run t).handle
+      (fun _ e => .inl e)
+      (fun _ r => .inr r)
+
+def weaken (p : Parser ε ⟨ge, gc⟩ α) : Parser ε .fallible α :=
+  p.weakenErrors.weakenConsumes
 
 def runOption (p : Parser ε ⟨ge, gc⟩ α) (t : Text n) : Option (Success n gc α) :=
   p.run t |>.handle (fun _ _ => .none) (fun _ r => .some r)
@@ -744,6 +771,35 @@ def sepBy
   grade_by by simp
               cases ge <;> cases gc <;> simp
               have := IsEmpty.false p; contradiction
+
+def countSucc
+  (p : Parser ε ⟨ge, gc⟩ α)
+  : (n : Nat) → Parser ε ⟨ge, gc⟩ (List.Vector α (n + 1))
+  | 0 => (· ::ᵥ .nil) <$>ᵍ p
+  | n + 1 => gdo
+      let x ← p
+      let rest ← countSucc p n
+      return (x ::ᵥ rest)
+      grade_by by simp
+
+def count
+  (p : Parser ε ⟨ge, gc⟩ α)
+  : (n : Nat) → Parser ε ⟨ge ⊓ .possibly, gc ⊓ .possibly⟩ (List.Vector α n)
+  | 0 => ok .nil
+  | n + 1 => countSucc p n |>.relax
+
+def sepByN
+  (sep : Parser ε ⟨ge', gc'⟩ β)
+  (p : Parser ε ⟨ge, gc⟩ α)
+  : (n : Nat) → Parser ε .fallible (List.Vector α n)
+  | 0 => ok .nil
+  | n + 1 => (gdo
+    let sepP : Parser ε ⟨ge' ⊔ ge, gc' ⊔ gc⟩ α := gdo
+      sep; p
+      grade_by by simp
+    let p1 ← p
+    let ps ← count sepP n
+    return (p1 ::ᵥ ps)) |>.weaken
 
 def chainl1
   (op : Parser ε ⟨ge', .always⟩ (α → α → α))

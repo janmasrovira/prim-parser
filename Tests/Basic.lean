@@ -38,6 +38,15 @@ def toText (s : String) : Text s.toList.length := ⟨s.toList, rfl⟩
 #guard (sepBy (string ",") (satisfy Char.isAlpha)).runResult? (toText "123")
     == some []
 
+-- sepByN
+#guard (sepByN (string ",") (satisfy Char.isAlpha) 3).runResult? (toText "a,b,c")
+    == some ⟨['a', 'b', 'c'], rfl⟩
+#guard (sepByN (string ",") (satisfy Char.isAlpha) 0).runResult? (toText "abc")
+    == some ⟨[], rfl⟩
+#guard (sepByN (string ",") (satisfy Char.isAlpha) 2).runResult? (toText "a,b,c")
+    == some ⟨['a', 'b'], rfl⟩
+#guard (sepByN (string ",") (satisfy Char.isAlpha) 3).runResult? (toText "a,b") == none
+
 -- digit
 #guard digit.runResult? (toText "7x") == some 7
 #guard digit.runResult? (toText "x") == none
