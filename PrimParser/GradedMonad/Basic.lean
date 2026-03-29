@@ -1,20 +1,33 @@
 import Mathlib.Algebra.Group.Defs
 
+/-!
+# Graded Monads
+
+Type classes for functors, applicatives, monads, and alternatives indexed by a
+monoidal grade. Composition multiplies grades via the monoid operation.
+-/
+
 variable
   {G : Type} [Monoid G]
 
+/-- A type family indexed by a grade and a type. -/
 abbrev GradedType G := G → Type → Type
 
+/-- Graded functor. -/
+-- TODO is this class redundant?
 class GFunctor (f : GradedType G) : Type 1 where
   gmap {i α β} (h : α → β) : f i α → f i β
 
+/-- Graded applicative. -/
 class GApplicative (f : GradedType G) extends GFunctor f where
   gpure {α} : α → f 1 α
   gseq {i j α β} : f i (α → β) → (Unit → f j α) → f (i * j) β
 
+/-- Graded monad. -/
 class GMonad (m : GradedType G) extends GApplicative m where
   gbind {i j α β} : m i α → (α → m j β) → m (i * j) β
 
+/-- Graded alternative. -/
 class GAlternative [AddSemigroup G] [Zero G] (f : GradedType G) extends GApplicative f where
   gempty {α} : f 0 α
   gchoice {α} {i j} : f i α → f j α → f (i + j) α
@@ -24,6 +37,7 @@ export GApplicative (gpure gseq)
 export GMonad (gbind)
 export GAlternative (gempty gchoice)
 
+/-- Cast the the grade of a graded type -/
 def gcast {f : GradedType G} {i j : G} {α} (h : i = j) (x : f i α) : f j α := h ▸ x
 
 infixr:100 " <$>ᵍ " => gmap

@@ -1,5 +1,14 @@
 import PrimParser.GradedMonad.Basic
 
+/-!
+# Graded Do-Notation
+
+Provides `gdo` blocks that desugar into `gbind`/`gpure` calls, mirroring
+Lean's built-in `do` notation for graded monads. An optional trailing
+`grade_by` element supplies a proof that the computed grade equals the
+expected one.
+-/
+
 variable
   {G : Type} [Monoid G]
 

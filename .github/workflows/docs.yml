@@ -25,7 +25,7 @@ jobs:
           build-args: "prim-parser"
 
       - name: Build docs
-        run: lake -d docbuild build prim-parser:docs
+        run: lake -d docbuild build PrimParser:docs
 
       - uses: actions/upload-pages-artifact@v3
         with:

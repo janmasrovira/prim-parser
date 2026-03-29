@@ -1,5 +1,6 @@
 import PrimParser.Base
 
+/-- Three-valued modality tracking whether a property holds always, possibly, or never. -/
 inductive Necessity where
   | possibly
   | always
@@ -54,6 +55,7 @@ instance : Monoid Necessity where
   one_mul a := by cases a <;> decide
   mul_one a := by cases a <;> decide
 
+/-- Flips `always` and `never`, leaving `possibly` unchanged. -/
 def complement : Necessity → Necessity
   | .always => .never
   | .possibly => .possibly
@@ -74,11 +76,20 @@ variable
 @[simp] theorem never_le : never ≤ a := by cases a <;> decide
 @[simp] theorem le_always : a ≤ always := by cases a <;> decide
 
+/-- Conditional selection: when `sel` is `always` returns `a`, when `never` returns `b`,
+when `possibly` returns a conservative value (see theorem `ite_possibly` and `ite_possibly_cases`). -/
 abbrev ite (sel a b : Necessity) : Necessity := (a ⊓ b) ⊔ sel ⊓ a ⊔ sel.complement ⊓ b
 @[simp] theorem ite_always : always.ite a b = a := by simp
 @[simp] theorem ite_never : never.ite a b = b := by simp
 @[simp] theorem ite_possibly : possibly.ite a b = (a ⊓ b) ⊔ possibly ⊓ (a ⊔ b) := by
   cases a <;> cases b <;> simp
+@[simp] theorem ite_possibly_cases :
+  possibly.ite a b =
+  match a, b with
+  | .never, .never => .never
+  | .always, .always => .always
+  | _, _ => .possibly
+  := by cases a <;> cases b <;> simp
 @[simp] theorem ite_idem : a.ite a a = a := by
   cases a <;> simp
 
