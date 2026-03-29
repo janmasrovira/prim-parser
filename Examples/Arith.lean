@@ -19,28 +19,19 @@ def eval : Expr → Int
   | .mul l r => l.eval * r.eval
   | .div l r => l.eval / r.eval
 
-private def lchar (c : Char) : Parser Error .conditional PUnit :=
-  lexeme (char c)
-
 private def addOp : Parser Error .conditional (Expr → Expr → Expr) :=
   choice
-    ((fun _ => Expr.add) <$>ᵍ lchar '+')
-    ((fun _ => Expr.sub) <$>ᵍ lchar '-')
+    ((fun _ => Expr.add) <$>ᵍ lexeme (char '+'))
+    ((fun _ => Expr.sub) <$>ᵍ lexeme (char '-'))
 
 private def mulOp : Parser Error .conditional (Expr → Expr → Expr) :=
   choice
-    ((fun _ => Expr.mul) <$>ᵍ lchar '*')
-    ((fun _ => Expr.div) <$>ᵍ lchar '/')
+    ((fun _ => Expr.mul) <$>ᵍ lexeme (char '*'))
+    ((fun _ => Expr.div) <$>ᵍ lexeme (char '/'))
 
 def expr : Parser Error .conditional Expr :=
   fix (fun expr_rec =>
-    let parens : Parser Error .conditional Expr := gdo
-      lchar '('
-      let e ← expr_rec
-      lchar ')'
-      return e
-      grade_by by simp
-    let atom := choice (Expr.lit <$>ᵍ lexeme nat) parens
+    let atom := choice (Expr.lit <$>ᵍ lexeme nat) (parens expr_rec)
     let term := chainl1 mulOp atom
     chainl1 addOp term)
 

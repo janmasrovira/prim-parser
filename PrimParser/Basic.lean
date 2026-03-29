@@ -745,6 +745,27 @@ def lexeme (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge, gc ⊔ .poss
   return r
   grade_by by simp
 
+def lparen   := char '('
+def rparen   := char ')'
+def lbracket := char '['
+def rbracket := char ']'
+def lbrace   := char '{'
+def rbrace   := char '}'
+def dquote   := char '\"'
+def comma    := char ','
+
+def parens (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge ⊔ .possibly, .always⟩ α := gdo
+  lexeme lparen; let r ← p; lexeme rparen; return r
+  grade_by by simp
+
+def brackets (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge ⊔ .possibly, .always⟩ α := gdo
+  lexeme lbracket; let r ← p; lexeme rbracket; return r
+  grade_by by simp
+
+def braces (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge ⊔ .possibly, .always⟩ α := gdo
+  lexeme lbrace; let r ← p; lexeme rbrace; return r
+  grade_by by simp
+
 def digit : Parser Error .conditional Nat :=
   token fun c => if c.isDigit then some (c.toNat - '0'.toNat) else none
 

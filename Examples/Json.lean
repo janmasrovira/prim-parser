@@ -16,9 +16,6 @@ inductive Json where
 
 namespace Json
 
-private def lchar (c : Char) : Parser Error .conditional PUnit :=
-  lexeme (char c)
-
 private def keyword (s : String) : Parser Error .conditional PUnit :=
   lexeme (string s)
 
@@ -33,12 +30,10 @@ private def jbool : Parser Error .conditional Json :=
 private def jnum : Parser Error .conditional Json :=
   .num <$>ᵍ lexeme nat
 
-private def dquotes := char '\"'
-
 private def stringLit : Parser Error .conditional String := gdo
-  dquotes
+  dquote
   let cs ← many (satisfy (· != '\"'))
-  dquotes
+  dquote
   return String.ofList cs
   grade_by by simp
 
@@ -48,21 +43,17 @@ private def jstring : Parser Error .conditional Json :=
 def json : Parser Error .conditional Json :=
   fix (fun json_rec =>
     let jarray : Parser Error .conditional Json := gdo
-      lchar '['
-      let items ← sepBy (lchar ',') json_rec
-      lchar ']'
+      let items ← brackets (sepBy (lexeme comma) json_rec)
       return .arr items
       grade_by by simp
     let jpair : Parser Error .conditional (String × Json) := gdo
       let k ← lexeme stringLit
-      lchar ':'
+      lexeme (char ':')
       let v ← json_rec
       return (k, v)
       grade_by by simp
     let jobject : Parser Error .conditional Json := gdo
-      lchar '{'
-      let kvs ← sepBy (lchar ',') jpair
-      lchar '}'
+      let kvs ← braces (sepBy (lexeme comma) jpair)
       return .obj kvs
       grade_by by simp
     oneOf [jnull, jbool, jnum, jstring, jarray, jobject])

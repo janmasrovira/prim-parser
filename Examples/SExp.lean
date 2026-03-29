@@ -20,10 +20,10 @@ def patom : Parser Error .conditional SExp :=
 def sexp : Parser Error .conditional SExp :=
   fix (fun sexp_rec =>
     let plist : Parser Error .conditional SExp := gdo
-      lexeme (char '(')
+      lexeme lparen
       let first ← sexp_rec
       let rest ← many (gdo whitespace; sexp_rec)
-      lexeme (char ')')
+      lexeme rparen
       return listToPairs (first :: rest)
       grade_by by simp
     choice patom plist)

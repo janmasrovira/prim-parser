@@ -31,8 +31,6 @@ instance : BEq ((n : Nat) × Table n) where
     a.2.columns.toList == b.2.columns.toList &&
     a.2.rows.map List.Vector.toList == b.2.rows.map List.Vector.toList
 
-private def comma := char ','
-private def dquote := char '\"'
 private def newline := char '\n'
 
 private def escapedQuote : Parser Error .conditional Char := gdo
