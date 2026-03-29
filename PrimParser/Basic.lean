@@ -264,6 +264,23 @@ instance : GApplicative (Parser ε) where
 instance : GMonad (Parser ε) where
   gbind := bind
 
+/-- Build a recursive parser via a fixpoint. Termination is guaranteed by
+requiring the body to always consume input. -/
+def fix [Inhabited ε]
+  (f : Parser ε ⟨ge, .always⟩ α → Parser ε ⟨ge, .always⟩ α)
+  (h : .possibly ≤ ge := by simp)
+  : Parser ε ⟨ge, .always⟩ α :=
+ let rec go {n} (t : Text n) : Outcome ε n ⟨ge, .always⟩ α :=
+  match n, t with
+  | 0, _ => Outcome.throw (h := h) default
+  | n + 1, t =>
+    let self : Parser ε ⟨ge, .always⟩ α :=
+      ⟨fun {k} t' =>
+        if k ≤ n then go t'
+        else Outcome.throw (h := h) default⟩
+    f self |>.run t
+  ⟨fun {n} t => go t⟩
+
 instance : LawfulFunctor (Success n gc) where
   map_const := rfl
   id_map x := by cases x; rfl
@@ -709,36 +726,25 @@ def optionalBind
     cont a
     grade_by by simp)
 
-private def manyTillGo
-  (p : Parser ε ⟨ge, .always⟩ α)
-  (e : Parser ε ⟨ge', gc'⟩ β)
-  (h : ge ≤ .possibly)
-  {n} (t : Text n)
-  : Outcome ε n ⟨ge, .possibly⟩ (List α) :=
-  match e.runOption t with
-  | .some _ => Outcome.ofSuccess (c := h) {result := [], restText := t}
-  | .none =>
-    p.run t |>.handle
-      (fun h err => Outcome.throw (h := h) err)
-      (fun _ r =>
-        have : r.restSize < n := r.witness
-        (manyTillGo p e h r.restText).handle
-          (fun h err => Outcome.throw (h := h) err)
-          (fun _ rest =>
-            Outcome.ofSuccess (c := h)
-              {result := r.result :: rest.result
-               restText := rest.restText
-               witness := by have := rest.witness; omega}))
-
 /-- Repeatedly apply `p` until `e` succeeds, collecting the results of `p`. -/
-def manyTill
+def manyTill [Inhabited ε]
   (p : Parser ε ⟨ge, .always⟩ α)
   (e : Parser ε ⟨ge', gc'⟩ β)
-  : Parser ε ⟨ge, .possibly⟩ (List α) where
-  run t := match ge with
-    | .always => p.run t
-    | .never => manyTillGo p e (by decide) t
-    | .possibly => manyTillGo p e (by decide) t
+  : Parser ε ⟨ge, .always⟩ (List α) :=
+  match ge with
+  | .always => (fun x => [x]) <$>ᵍ p
+  | .never => IsEmpty.false p |>.elim
+  | .possibly =>
+      let go : Parser ε .conditional (List α) := fix fun self => gdo
+        let a ← p
+        let done ← optional e
+        match done with
+        | .some _ => ok (ge := .possibly) (gc := .possibly) [a]
+        | .none =>
+          let as ← self.relaxConsumes
+          return (a :: as)
+        grade_by by simp
+      go
 
 /-- Apply `p` zero or more times, collecting results. Requires `p` to always consume. -/
 def many (p : Parser ε ⟨ge, .always⟩ α) : Parser ε .flexible (List α) where
@@ -898,22 +904,6 @@ def chainl1
     return (f, y))
   return rest.foldl (fun acc ⟨f, y⟩ => f acc y) x
   grade_by by simp
-
-/-- Build a recursive parser. -/
-def fix [Inhabited ε]
-  (f : Parser ε ⟨ge, .always⟩ α → Parser ε ⟨ge, .always⟩ α)
-  (h : .possibly ≤ ge := by simp)
-  : Parser ε ⟨ge, .always⟩ α :=
- let rec go {n} (t : Text n) : Outcome ε n ⟨ge, .always⟩ α :=
-  match n, t with
-  | 0, _ => Outcome.throw (h := h) default
-  | n + 1, t =>
-    let self : Parser ε ⟨ge, .always⟩ α :=
-      ⟨fun {k} t' =>
-        if k ≤ n then go t'
-        else Outcome.throw (h := h) default⟩
-    f self |>.run t
-  ⟨fun {n} t => go t⟩
 
 /-- Succeed only at end of input, consuming nothing. -/
 def eof : Parser Error .lookahead PUnit where
