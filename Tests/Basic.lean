@@ -33,9 +33,9 @@ def toText (s : String) : Text s.toList.length := ⟨s.toList, rfl⟩
 #guard (many1 (satisfy Char.isDigit)).runResult? (toText "x") == none
 
 -- sepBy
-#guard (sepBy (satisfy Char.isAlpha) (string ",")).runResult? (toText "a,b,c")
+#guard (sepBy (string ",") (satisfy Char.isAlpha)).runResult? (toText "a,b,c")
     == some ['a', 'b', 'c']
-#guard (sepBy (satisfy Char.isAlpha) (string ",")).runResult? (toText "123")
+#guard (sepBy (string ",") (satisfy Char.isAlpha)).runResult? (toText "123")
     == some []
 
 -- digit
@@ -53,8 +53,8 @@ private def plus : Parser Error .conditional (Nat → Nat → Nat) := gdo
   let _ ← satisfy (· == '+')
   return (· + ·)
 
-#guard (chainl1 digit plus).runResult? (toText "5") == some 5
-#guard (chainl1 digit plus).runResult? (toText "1+2+3") == some 6
+#guard (chainl1 plus digit).runResult? (toText "5") == some 5
+#guard (chainl1 plus digit).runResult? (toText "1+2+3") == some 6
 
 -- eof
 #guard eof.runResult? (toText "") == some ()

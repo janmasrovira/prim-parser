@@ -41,7 +41,7 @@ def expr : Parser Error .conditional Expr :=
       return e
       grade_by by simp
     let atom := choice (Expr.lit <$>ᵍ lexeme nat) parens
-    let term := chainl1 atom mulOp
-    chainl1 term addOp)
+    let term := chainl1 mulOp atom
+    chainl1 addOp term)
 
 end Expr

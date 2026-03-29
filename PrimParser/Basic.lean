@@ -728,8 +728,8 @@ def nat : Parser Error .conditional Nat := gdo
   grade_by by simp
 
 def sepBy
-  (p : Parser ε ⟨ge, gc⟩ α)
   (sep : Parser ε ⟨ge', gc'⟩ β)
+  (p : Parser ε ⟨ge, gc⟩ α)
   (h : gc' ⊔ gc = .always := by simp)
   : Parser ε .flexible (List α) := gdo
   let m ← optional p
@@ -746,8 +746,8 @@ def sepBy
               have := IsEmpty.false p; contradiction
 
 def chainl1
-  (p : Parser ε ⟨ge, .always⟩ α)
   (op : Parser ε ⟨ge', .always⟩ (α → α → α))
+  (p : Parser ε ⟨ge, .always⟩ α)
   : Parser ε ⟨ge, .always⟩ α := gdo
   let x ← p
   let rest ← many (gdo

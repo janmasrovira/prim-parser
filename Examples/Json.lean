@@ -49,7 +49,7 @@ def json : Parser Error .conditional Json :=
   fix (fun json_rec =>
     let jarray : Parser Error .conditional Json := gdo
       lchar '['
-      let items ← sepBy json_rec (lchar ',')
+      let items ← sepBy (lchar ',') json_rec
       lchar ']'
       return .arr items
       grade_by by simp
@@ -61,7 +61,7 @@ def json : Parser Error .conditional Json :=
       grade_by by simp
     let jobject : Parser Error .conditional Json := gdo
       lchar '{'
-      let kvs ← sepBy jpair (lchar ',')
+      let kvs ← sepBy (lchar ',') jpair
       lchar '}'
       return .obj kvs
       grade_by by simp
