@@ -75,6 +75,18 @@ variable
 
 @[simp] theorem never_le : never ≤ a := by cases a <;> decide
 @[simp] theorem le_always : a ≤ always := by cases a <;> decide
+@[simp] theorem max_always : a ⊔ b = always ↔ a = always ∨ b = always := by
+  cases a <;> cases b <;> decide
+@[simp] theorem max_never : a ⊔ b = never ↔ a = never ∧ b = never := by
+  cases a <;> cases b <;> decide
+@[simp] theorem min_never : a ⊓ b = never ↔ a = never ∨ b = never := by
+  cases a <;> cases b <;> decide
+@[simp] theorem min_always : a ⊓ b = always ↔ a = always ∧ b = always := by
+  cases a <;> cases b <;> decide
+@[simp] theorem complement_always_iff : a.complement = always ↔ a = never := by
+  cases a <;> decide
+@[simp] theorem complement_never_iff : a.complement = never ↔ a = always := by
+  cases a <;> decide
 
 /-- Conditional selection: when `sel` is `always` returns `a`, when `never` returns `b`,
 when `possibly` returns a conservative value (see theorem `ite_possibly` and `ite_possibly_cases`). -/
@@ -90,7 +102,7 @@ abbrev ite (sel a b : Necessity) : Necessity := (a ⊓ b) ⊔ sel ⊓ a ⊔ sel.
   | .always, .always => .always
   | _, _ => .possibly
   := by cases a <;> cases b <;> simp
-@[simp] theorem ite_idem : a.ite a a = a := by
+@[simp] theorem ite_idem : b.ite a a = a := by
   cases a <;> simp
 
 end Necessity

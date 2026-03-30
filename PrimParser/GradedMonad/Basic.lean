@@ -39,7 +39,12 @@ export GAlternative (gempty gchoice)
 /-- Cast the grade of a graded type -/
 def gcast {f : GradedType G} {i j : G} {α} (h : i = j) (x : f i α) : f j α := h ▸ x
 
+/-- Replace the result of a graded computation with a constant value. -/
+abbrev gconst {f : GradedType G} [GFunctor f] {i α β} (b : β) (x : f i α) : f i β :=
+  gmap (fun _ => b) x
+
 infixr:100 " <$>ᵍ " => gmap
+infixr:100 " <$ᵍ "  => gconst
 infixl:60  " <*>ᵍ " => gseq
 infixl:55  " >>=ᵍ " => gbind
 infixl:30  " <|>ᵍ " => gchoice

@@ -29,4 +29,4 @@ def between' (l : M gl α) (r : M gr β) (c : M g γ) : M (gl * g * gr) (α × �
 
 /-- Run `c` between `l` and `r`, returning only the middle result. -/
 def between (l : M gl α) (r : M gr β) (c : M g γ) : M (gl * g * gr) γ := gdo
-  (fun x => x.2.1) <$>ᵍ between' l r c
+  (·.2.1) <$>ᵍ between' l r c

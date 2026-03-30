@@ -279,7 +279,7 @@ def fix [Inhabited ε]
         if k ≤ n then go t'
         else Outcome.throw (h := h) default⟩
     f self |>.run t
-  ⟨fun {n} t => go t⟩
+  ⟨fun t => go t⟩
 
 private theorem consumptionWitness.ite_right
   (c : .possibly ≤ ge')
@@ -423,13 +423,13 @@ def satisfy (f : Char → Bool) : Parser Error .conditional Char :=
 
 /-- Match a specific character. -/
 def char (c : Char) : Parser Error .conditional PUnit :=
-  (fun _ => ()) <$>ᵍ satisfy (· == c)
+  () <$ᵍ satisfy (· == c)
 
 /-- Match an exact string. -/
 def string (str : String) : Parser Error .conditional PUnit :=
   let rec go : List Char → Parser Error .conditional PUnit
     | [] => throw Error.fail
-    | [c] => (fun _ => ()) <$>ᵍ satisfy (· == c)
+    | [c] => () <$ᵍ satisfy (· == c)
     | c :: cs => gdo
       satisfy (· == c)
       go cs
@@ -460,22 +460,17 @@ def optionalBind
 /-- Repeatedly apply `p` until `e` succeeds, collecting the results of `p`. -/
 def manyTill [Inhabited ε]
   (p : Parser ε ⟨ge, .always⟩ α)
-  (e : Parser ε ⟨ge', gc'⟩ β)
+  (e : Parser ε ⟨ge', .always⟩ β)
   : Parser ε ⟨ge, .always⟩ (List α) :=
   match ge with
   | .always => (fun x => [x]) <$>ᵍ p
   | .never => IsEmpty.false p |>.elim
   | .possibly =>
-      let go : Parser ε .conditional (List α) := fix fun self => gdo
-        let a ← p
-        let done ← optional e
-        match done with
-        | .some _ => ok (ge := .possibly) (gc := .possibly) [a]
-        | .none =>
-          let as ← self.relaxConsumes
-          return (a :: as)
-        grade_by by simp
-      go
+      fix fun self =>
+        oneOf [
+          [] <$ᵍ e |>.weakenErrors,
+          gdo let a ← p; let as ← self; return (a :: as); grade_by by simp
+        ]
 
 /-- Apply `p` zero or more times, collecting results. Requires `p` to always consume. -/
 def many (p : Parser ε ⟨ge, .always⟩ α) : Parser ε .flexible (List α) where
@@ -509,11 +504,11 @@ def takeWhile1 (f : Char → Bool) : Parser Error .conditional String :=
 
 /-- Skip characters while `f` holds. -/
 def skipWhile (f : Char → Bool) : Parser Error .flexible PUnit :=
-  (fun _ => ()) <$>ᵍ takeWhile f
+  () <$ᵍ takeWhile f
 
 /-- Skip one or more characters while `f` holds. -/
 def skipWhile1 (f : Char → Bool) : Parser Error .conditional PUnit :=
-  (fun _ => ()) <$>ᵍ takeWhile1 f
+  () <$ᵍ takeWhile1 f
 
 /-- Skip zero or more whitespace characters. -/
 def whitespace : Parser Error .flexible PUnit :=

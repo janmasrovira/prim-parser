@@ -20,11 +20,11 @@ private def keyword (s : String) : Parser Error .conditional PUnit :=
   lexeme (string s)
 
 private def jnull : Parser Error .conditional Json :=
-  (fun _ => .null) <$>ᵍ keyword "null"
+  .null <$ᵍ keyword "null"
 
 private def jbool : Parser Error .conditional Json :=
-  (fun _ => Json.bool true) <$>ᵍ keyword "true"
-  <|> (fun _ => Json.bool false) <$>ᵍ keyword "false"
+  Json.bool true <$ᵍ keyword "true"
+  <|> Json.bool false <$ᵍ keyword "false"
 
 private def jnum : Parser Error .conditional Json :=
   .num <$>ᵍ lexeme nat
