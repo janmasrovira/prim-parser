@@ -14,7 +14,6 @@ variable
 abbrev GradedType G := G → Type → Type
 
 /-- Graded functor. -/
--- TODO is this class redundant?
 class GFunctor (f : GradedType G) : Type 1 where
   gmap {i α β} (h : α → β) : f i α → f i β
 
@@ -37,7 +36,7 @@ export GApplicative (gpure gseq)
 export GMonad (gbind)
 export GAlternative (gempty gchoice)
 
-/-- Cast the the grade of a graded type -/
+/-- Cast the grade of a graded type -/
 def gcast {f : GradedType G} {i j : G} {α} (h : i = j) (x : f i α) : f j α := h ▸ x
 
 infixr:100 " <$>ᵍ " => gmap
