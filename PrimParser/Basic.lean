@@ -487,11 +487,15 @@ def many (p : Parser ε ⟨ge, .always⟩ α) : Parser ε .flexible (List α) wh
          witness := by have := rest.witness; omega}
     go p
 
+abbrev NonEmptyList α := { l : List α // l ≠ [] }
+abbrev NonEmptyList.mk (x : α) (xs : List α) : NonEmptyList α := ⟨x :: xs, by simp⟩
+abbrev NonEmptyList.toList : NonEmptyList α → List α := (·.1)
+
 /-- Apply `p` one or more times, collecting results. -/
-def many1 (p : Parser ε ⟨ge, .always⟩ α) : Parser ε ⟨ge, .always⟩ (List α) := gdo
+def many1 (p : Parser ε ⟨ge, .always⟩ α) : Parser ε ⟨ge, .always⟩ (NonEmptyList α) := gdo
   let x ← p
   let xs ← many p
-  return (x :: xs)
+  return (NonEmptyList.mk x xs)
   grade_by by simp
 
 /-- Consume characters while `f` holds, returning the collected string. -/
@@ -500,7 +504,7 @@ def takeWhile (f : Char → Bool) : Parser Error .flexible String :=
 
 /-- Consume one or more characters while `f` holds. -/
 def takeWhile1 (f : Char → Bool) : Parser Error .conditional String :=
-  String.ofList <$>ᵍ many1 (satisfy f)
+  (String.ofList ∘ NonEmptyList.toList) <$>ᵍ many1 (satisfy f)
 
 /-- Skip characters while `f` holds. -/
 def skipWhile (f : Char → Bool) : Parser Error .flexible PUnit :=
