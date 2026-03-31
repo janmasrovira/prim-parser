@@ -55,6 +55,8 @@ instance : Monoid Necessity where
   one_mul a := by cases a <;> decide
   mul_one a := by cases a <;> decide
 
+instance : Lattice Necessity where
+
 /-- Flips `always` and `never`, leaving `possibly` unchanged. -/
 def complement : Necessity → Necessity
   | .always => .never
