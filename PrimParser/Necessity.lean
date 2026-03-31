@@ -11,28 +11,28 @@ namespace Necessity
 
 instance : Max Necessity where
   max a b := match a, b with
-    | .always, _ => .always
-    | .possibly, .never => .possibly
+    | always, _ => always
+    | possibly, never => possibly
     | _, _ => b
 
 instance : Min Necessity where
   min a b := match a, b with
-    | .never, _ => .never
-    | .possibly, .always => .possibly
+    | never, _ => never
+    | possibly, always => possibly
     | _, _ => b
 
 instance : LinearOrder Necessity := by
   let toFin : Necessity → Fin 3
-    | .never => 0
-    | .possibly => 1
-    | .always => 2
+    | never => 0
+    | possibly => 1
+    | always => 2
   apply LinearOrder.lift toFin
   intro x y p; cases x <;> cases y <;> cases p <;> rfl
   repeat (intro x y; cases x <;> cases y <;> rfl)
 
 instance : BoundedOrder Necessity where
-  top := .always
-  bot := .never
+  top := always
+  bot := never
   le_top a := by cases a <;> decide
   bot_le a := by cases a <;> decide
 
@@ -51,7 +51,7 @@ instance : SemilatticeInf Necessity where
 instance : Monoid Necessity where
   mul := max
   mul_assoc a b c := by cases a <;> cases b <;> cases c <;> decide
-  one := .never
+  one := never
   one_mul a := by cases a <;> decide
   mul_one a := by cases a <;> decide
 
@@ -59,9 +59,9 @@ instance : Lattice Necessity where
 
 /-- Flips `always` and `never`, leaving `possibly` unchanged. -/
 def complement : Necessity → Necessity
-  | .always => .never
-  | .possibly => .possibly
-  | .never => .always
+  | always => never
+  | possibly => possibly
+  | never => always
 
 instance : Complement Necessity where
   complement := complement
@@ -100,9 +100,9 @@ abbrev ite (sel a b : Necessity) : Necessity := (a ⊓ b) ⊔ sel ⊓ a ⊔ sel.
 @[simp] theorem ite_possibly_cases :
   possibly.ite a b =
   match a, b with
-  | .never, .never => .never
-  | .always, .always => .always
-  | _, _ => .possibly
+  | never, never => never
+  | always, always => always
+  | _, _ => possibly
   := by cases a <;> cases b <;> simp
 @[simp] theorem ite_idem : b.ite a a = a := by
   cases a <;> simp
