@@ -57,6 +57,9 @@ instance : Monoid Necessity where
 
 instance : Lattice Necessity where
 
+instance : DistribLattice Necessity where
+  le_sup_inf a b c := by cases a <;> cases b <;> cases c <;> decide
+
 /-- Flips `always` and `never`, leaving `possibly` unchanged. -/
 def complement : Necessity → Necessity
   | always => never
