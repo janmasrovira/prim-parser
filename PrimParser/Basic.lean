@@ -447,6 +447,10 @@ def optional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨.never, ge.complemen
                    restText := r.restText
                    witness := r.witness.min_possibly}
 
+/-- Try `p`; return the result on success or the default value `d` on failure. -/
+def optionalD (p : Parser ε ⟨ge, gc⟩ α) (d : α) : Parser ε ⟨.never, ge.complement ⊓ gc⟩ α :=
+  (·.getD d) <$>ᵍ optional p
+
 /-- Try `p` then apply `cont` to its result; wrap the final result in `Option`. -/
 def optionalBind
   (p : Parser ε ⟨ge, gc⟩ α)
@@ -490,12 +494,13 @@ def many (p : Parser ε ⟨ge, .always⟩ α) : Parser ε .flexible (List α) wh
 abbrev NonEmptyList α := { l : List α // l ≠ [] }
 abbrev NonEmptyList.mk (x : α) (xs : List α) : NonEmptyList α := ⟨x :: xs, by simp⟩
 abbrev NonEmptyList.toList : NonEmptyList α → List α := (·.1)
+infixr:67 " ::₁ " => NonEmptyList.mk
 
 /-- Apply `p` one or more times, collecting results. -/
 def many1 (p : Parser ε ⟨ge, .always⟩ α) : Parser ε ⟨ge, .always⟩ (NonEmptyList α) := gdo
   let x ← p
   let xs ← many p
-  return (NonEmptyList.mk x xs)
+  return x ::₁ xs
   grade_by by simp
 
 /-- Consume characters while `f` holds, returning the collected string. -/

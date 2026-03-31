@@ -29,7 +29,7 @@ def toText (s : String) : Text s.toList.length := ⟨s.toList, rfl⟩
 #guard (optional (satisfy Char.isDigit)).runResult? (toText "x") == some none
 
 -- many1
-#guard (many1 (satisfy Char.isDigit)).runResult? (toText "123x") == some ['1', '2', '3']
+#guard (many1 (satisfy Char.isDigit)).runResult? (toText "123x") == some ('1' ::₁ ['2', '3'])
 #guard (many1 (satisfy Char.isDigit)).runResult? (toText "x") == none
 
 -- sepBy
