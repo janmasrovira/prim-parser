@@ -37,14 +37,12 @@ private def escapedQuote : Parser Error .conditional Char := gdo
   dquote
   dquote
   return '\"'
-  grade_by by simp
 
 private def quotedField : Parser Error .conditional String := gdo
   dquote
   let cs ← many (escapedQuote <|> satisfy (· != '\"'))
   dquote
   return String.ofList cs
-  grade_by by simp
 
 private def unquotedField : Parser Error .flexible String :=
   takeWhile (fun c => c != ',' && c != '\"' && c != '\n')
@@ -56,7 +54,6 @@ private def int : Parser Error .conditional Int := gdo
   let neg ← optional (char '-')
   let n ← nat
   return if neg.isSome then -↑n else ↑n
-  grade_by by simp
 
 private def value : Parser Error .flexible Value :=
   .int <$>ᵍ int <|> .str <$>ᵍ unquotedField
@@ -81,6 +78,5 @@ def table : Parser Error .conditional ((n : Nat) × Table n) := gdo
   let rows ← sepBy newline (exactRow n)
   let t : Table n := { columns := ⟨headers, rfl⟩, rows }
   return (⟨n, t⟩ : (n : Nat) × Table n)
-  grade_by by simp [HMul.hMul, Mul.mul, OfNat.ofNat, One.one]
 
 end Csv

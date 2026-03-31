@@ -562,7 +562,6 @@ def nat : Parser Error .conditional Nat := gdo
   let d ← digit
   let ds ← many digit
   return ds.foldl (fun acc d => acc * 10 + d) d
-  grade_by by simp
 
 /-- Parse an integer (optional leading `-` followed by digits). -/
 def int : Parser Error .conditional Int := gdo

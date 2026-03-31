@@ -25,7 +25,6 @@ def sexp : Parser Error .conditional SExp :=
       let rest ← many (gdo whitespace; sexp_rec)
       lexeme rparen
       return listToPairs (first :: rest)
-      grade_by by simp
     patom <|> plist)
 
 end SExp

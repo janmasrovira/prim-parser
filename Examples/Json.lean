@@ -34,7 +34,6 @@ private def stringLit : Parser Error .conditional String := gdo
   let cs ← many (satisfy (· != '\"'))
   dquote
   return String.ofList cs
-  grade_by by simp
 
 private def jstring : Parser Error .conditional Json :=
   .str <$>ᵍ lexeme stringLit
@@ -44,17 +43,14 @@ def json : Parser Error .conditional Json :=
     let jarray : Parser Error .conditional Json := gdo
       let items ← brackets (sepBy (lexeme comma) json_rec)
       return .arr items
-      grade_by by simp
     let jpair : Parser Error .conditional (String × Json) := gdo
       let k ← lexeme stringLit
       lexeme (char ':')
       let v ← json_rec
       return (k, v)
-      grade_by by simp
     let jobject : Parser Error .conditional Json := gdo
       let kvs ← braces (sepBy (lexeme comma) jpair)
       return .obj kvs
-      grade_by by simp
     oneOf [jnull, jbool, jnum, jstring, jarray, jobject])
 
 end Json
