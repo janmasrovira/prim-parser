@@ -101,11 +101,7 @@ abbrev ite (sel a b : Necessity) : Necessity := (a ⊓ b) ⊔ sel ⊓ a ⊔ sel.
 @[simp] theorem ite_possibly : possibly.ite a b = (a ⊓ b) ⊔ possibly ⊓ (a ⊔ b) := by
   cases a <;> cases b <;> simp
 @[simp] theorem ite_possibly_cases :
-  possibly.ite a b =
-  match a, b with
-  | never, never => never
-  | always, always => always
-  | _, _ => possibly
+  possibly.ite a b = if a = b then a else possibly
   := by cases a <;> cases b <;> simp
 @[simp] theorem ite_idem : b.ite a a = a := by
   cases a <;> simp
