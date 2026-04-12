@@ -51,6 +51,6 @@ def json : Parser Error .conditional Json :=
     let jobject : Parser Error .conditional Json := gdo
       let kvs ← braces (sepBy (lexeme comma) jpair)
       return .obj kvs
-    oneOf [jnull, jbool, jnum, jstring, jarray, jobject])
+    oneOf (jnull ::₁ [jbool, jnum, jstring, jarray, jobject]))
 
 end Json

@@ -473,10 +473,10 @@ def manyTill [Inhabited ε]
   | .never => IsEmpty.false p |>.elim
   | .possibly =>
       fix fun self =>
-        oneOf [
-          [] <$ᵍ e |>.weakenErrors,
-          gdo let a ← p; let as ← self; return (a :: as); grade_by by simp
-        ]
+        oneOf (
+          ([] <$ᵍ e |>.weakenErrors) ::₁
+          [gdo let a ← p; let as ← self; return (a :: as); grade_by by simp]
+        )
 
 /-- Apply `p` zero or more times, collecting results. Requires `p` to always consume. -/
 def many (p : Parser ε ⟨ge, .always⟩ α) : Parser ε .flexible (List α) where
@@ -594,21 +594,25 @@ def sepBy
 
 /-- Parse exactly `n + 1` occurrences of `p`. -/
 def count1
+  (n : Nat)
   (p : Parser ε ⟨ge, gc⟩ α)
-  : (n : Nat) → Parser ε ⟨ge, gc⟩ (List.Vector α (n + 1))
+  : Parser ε ⟨ge, gc⟩ (List.Vector α (n + 1)) :=
+  match n with
   | 0 => (· ::ᵥ .nil) <$>ᵍ p
   | n + 1 => gdo
       let x ← p
-      let rest ← count1 p n
+      let rest ← count1 n p
       return (x ::ᵥ rest)
       grade_by by simp
 
 /-- Parse exactly `n` occurrences of `p`. -/
 def count
+  (n : Nat)
   (p : Parser ε ⟨ge, gc⟩ α)
-  : (n : Nat) → Parser ε ⟨ge ⊓ .possibly, gc ⊓ .possibly⟩ (List.Vector α n)
+  : Parser ε ⟨ge ⊓ .possibly, gc ⊓ .possibly⟩ (List.Vector α n) :=
+  match n with
   | 0 => ok .nil
-  | n + 1 => count1 p n |>.relax
+  | n + 1 => count1 n p |>.relax
 
 /-- Parse exactly `n` occurrences of `p` separated by `sep`. -/
 def sepByN
@@ -621,7 +625,7 @@ def sepByN
       sep; p
       grade_by by simp
     let p1 ← p
-    let ps ← count sepP n
+    let ps ← count n sepP
     return (p1 ::ᵥ ps)) |>.weaken
 
 /-- Parse one or more occurrences of `p` separated by left-associative operator `op`. -/
