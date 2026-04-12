@@ -320,11 +320,13 @@ def choice
 infixl:20 " <|> " => choice
 
 /-- Try each parser in the list in order, returning the first success. -/
-def oneOf (l : List (Parser ε g α)) (p : l.length ≠ 0 := by simp) : Parser ε g α := match l with
-  | [] => nomatch p
-  | [x] => x
-  | x :: y :: xs => by refine cast ?_ (choice x (oneOf (y :: xs)))
-                       congr 2 <;> simp
+def oneOf (l : NonEmptyList (Parser ε g α)) : Parser ε g α :=
+  let rec go (l : List (Parser ε g α)) (p : l.length ≠ 0 := by simp) : Parser ε g α := match l with
+      | [] => nomatch p
+      | [x] => x
+      | x :: y :: xs => by refine cast ?_ (choice x (go (y :: xs)))
+                           congr 2 <;> simp
+  go l.1 (p := by simpa using l.2)
 
 /-- A parser that always fails with error `e`. -/
 def throw (e : ε) (c : .possibly ≤ ge := by simp) : Parser ε ⟨ge, gc⟩ α where
@@ -491,10 +493,6 @@ def many (p : Parser ε ⟨ge, .always⟩ α) : Parser ε .flexible (List α) wh
          witness := by have := rest.witness; omega}
     go p
 
-abbrev NonEmptyList α := { l : List α // l ≠ [] }
-abbrev NonEmptyList.mk (x : α) (xs : List α) : NonEmptyList α := ⟨x :: xs, by simp⟩
-abbrev NonEmptyList.toList : NonEmptyList α → List α := (·.1)
-infixr:67 " ::₁ " => NonEmptyList.mk
 
 /-- Apply `p` one or more times, collecting results. -/
 def many1 (p : Parser ε ⟨ge, .always⟩ α) : Parser ε ⟨ge, .always⟩ (NonEmptyList α) := gdo
