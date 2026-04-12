@@ -593,13 +593,13 @@ def sepBy
               have := IsEmpty.false p; contradiction
 
 /-- Parse exactly `n + 1` occurrences of `p`. -/
-def countSucc
+def count1
   (p : Parser ε ⟨ge, gc⟩ α)
   : (n : Nat) → Parser ε ⟨ge, gc⟩ (List.Vector α (n + 1))
   | 0 => (· ::ᵥ .nil) <$>ᵍ p
   | n + 1 => gdo
       let x ← p
-      let rest ← countSucc p n
+      let rest ← count1 p n
       return (x ::ᵥ rest)
       grade_by by simp
 
@@ -608,7 +608,7 @@ def count
   (p : Parser ε ⟨ge, gc⟩ α)
   : (n : Nat) → Parser ε ⟨ge ⊓ .possibly, gc ⊓ .possibly⟩ (List.Vector α n)
   | 0 => ok .nil
-  | n + 1 => countSucc p n |>.relax
+  | n + 1 => count1 p n |>.relax
 
 /-- Parse exactly `n` occurrences of `p` separated by `sep`. -/
 def sepByN
