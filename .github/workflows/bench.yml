@@ -1,29 +1,47 @@
 name: Benchmark
 
 on:
-  push:
-    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 jobs:
   bench:
     runs-on: ubuntu-latest
+    env:
+      # Benchmark runs unless *every* changed file matches this regex (docs/aux only).
+      EXCLUDE: '(\.md$|^docbuild/|\.gitignore$)'
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0 # run.sh needs full history for worktrees
+          fetch-depth: 0   # run.sh needs history + the base branch for worktrees
+
+      - name: Detect parser-relevant changes
+        id: changes
+        run: |
+          base="${GITHUB_BASE_REF:-main}"
+          git fetch --no-tags --quiet origin "+refs/heads/$base:refs/remotes/origin/$base"
+          if git diff --name-only "origin/$base...HEAD" | grep -qvE "$EXCLUDE"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Only docs/aux files changed; skipping benchmark."
+          fi
 
       - uses: leanprover/lean-action@v1
+        if: steps.changes.outputs.run == 'true'
         with:
           build-args: "prim-parser"
 
       - name: Install hyperfine
+        if: steps.changes.outputs.run == 'true'
         run: sudo apt-get update && sudo apt-get install -y hyperfine
 
-      - name: Run benchmarks (single ref = HEAD)
-        run: bench/run.sh HEAD -
+      - name: Benchmark PR vs base
+        if: steps.changes.outputs.run == 'true'
+        run: bench/run.sh HEAD "origin/${GITHUB_BASE_REF:-main}"
 
       - uses: actions/upload-artifact@v4
+        if: steps.changes.outputs.run == 'true'
         with:
           name: bench-results
           path: bench/results/
