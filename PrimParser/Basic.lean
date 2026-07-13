@@ -161,7 +161,7 @@ variable
   {ge ge' : Necessity} -- used for `errors`
   {gc gc': Necessity} -- used for `consumes`
 
-def Outcome.handle
+@[inline] def Outcome.handle
   (p : Outcome ε n ⟨ge, gc⟩ α)
   (e : possibly ≤ ge → Failure n ε → β)
   (s : ge ≤ possibly → Success n gc α → β)
