@@ -11,14 +11,16 @@
 # hyperfine times the binaries per workload (comparing the two, or just REF_A).
 #
 # Tunables (environment variables):
-#   WORKLOADS  space-separated subset of "json arith csv"   (default: all)
-#   SIZE       problem size per workload                     (default: 2000)
-#   ITERS      reparses per process invocation               (default: 200)
-#   WARMUP     hyperfine warmup runs                          (default: 3)
-#   RUNS       hyperfine measured runs                        (default: 10)
-#   KEEP       keep worktrees after the run                   (default: 1)
+#   WORKLOADS  space-separated subset of "json arith csv" (default: all)
+#   SIZE       problem size per workload (default: 2000)
+#   ITERS      reparses per process invocation (default: 200)
+#   WARMUP     hyperfine warmup runs (default: 3)
+#   RUNS       hyperfine measured runs (default: 10)
+#   KEEP       keep worktrees after the run (default: 1)
 #   SHARE      symlink the main checkout's built .lake/packages (default: 1);
 #              set 0 when refs pin different toolchain/Mathlib versions
+#   HARNESS    "own" uses each ref's own bench/Bench.lean; "current" forces
+#              this checkout's onto all refs (default: own)
 #
 set -euo pipefail
 
@@ -39,6 +41,7 @@ WARMUP="${WARMUP:-3}"
 RUNS="${RUNS:-10}"
 KEEP="${KEEP:-1}"
 SHARE="${SHARE:-1}"
+HARNESS="${HARNESS:-own}"
 
 command -v hyperfine >/dev/null || { echo "error: hyperfine not found on PATH" >&2; exit 1; }
 [ -d "$REPO/.lake/packages" ] || {
@@ -79,7 +82,12 @@ build_ref() {
     ( cd "$wt" && lake exe cache get ) >&2 || true
   fi
 
-  cp "$BENCH_DIR/Bench.lean" "$wt/Bench.lean"
+  # "own": ref's own harness (fallback to this checkout's); else force this one.
+  if [ "$HARNESS" = "own" ] && [ -f "$wt/bench/Bench.lean" ]; then
+    cp "$wt/bench/Bench.lean" "$wt/Bench.lean"
+  else
+    cp "$BENCH_DIR/Bench.lean" "$wt/Bench.lean"
+  fi
   if ! grep -q 'name = "bench"' "$wt/lakefile.toml"; then
     printf '\n[[lean_exe]]\nname = "bench"\nroot = "Bench"\n' >> "$wt/lakefile.toml"
   fi

@@ -14,6 +14,6 @@ libraries.
 ## Build
 
 ```sh
-lake build        # build the library
-lake build Tests  # run the tests
+lake build # build the library
+lake build Tests # run the tests
 ```
