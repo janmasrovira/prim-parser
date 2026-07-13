@@ -16,6 +16,12 @@ name = "Examples"
 [[lean_lib]]
 name = "Tests"
 
+# Benchmark harness; not in defaultTargets, so normal builds skip it.
+[[lean_exe]]
+name = "bench"
+srcDir = "bench"
+root = "Bench"
+
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"

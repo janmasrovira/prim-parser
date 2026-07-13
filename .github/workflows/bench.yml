@@ -30,7 +30,8 @@ jobs:
       - uses: leanprover/lean-action@v1
         if: steps.changes.outputs.run == 'true'
         with:
-          build-args: "prim-parser"
+          # Build the exe so native Mathlib .o land in lean-action's cache.
+          build-args: "bench"
 
       - name: Install hyperfine
         if: steps.changes.outputs.run == 'true'
@@ -43,6 +44,7 @@ jobs:
           ITERS: 10
           WARMUP: 0
           RUNS: 2
+          INPLACE: 1
         run: bench/run.sh HEAD -
 
       - uses: actions/upload-artifact@v4
