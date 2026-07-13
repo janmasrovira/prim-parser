@@ -256,17 +256,16 @@ def Success.bindParser {xc fe fc : Necessity}
 instance : GradedFunctor (Parser ε) where
   gmap f p := ⟨fun t => f <$> p.run t⟩
 
-def Outcome.throwFailure (f : Failure n ε) (h : possibly ≤ g.errors := by simp) : Outcome ε n g α := by
-  rcases g with ⟨g1, g2⟩
-  match h : g1 with
-  | possibly => exact .inl f
-  | always => exact f
-  | never => contradiction
+@[inline] def Outcome.throwFailure (f : Failure n ε) (h : possibly ≤ g.errors := by simp) : Outcome ε n g α :=
+  match g, h with
+  | ⟨possibly, _⟩, _ => .inl f
+  | ⟨always, _⟩, _ => f
+  | ⟨never, _⟩, h => nomatch h
 
 def Outcome.throw (e : ε) (t : Text n) (h : possibly ≤ g.errors := by simp) : Outcome ε n g α :=
   Outcome.throwFailure ⟨e, t, by simp⟩ h
 
-def Outcome.ofSuccess (r : Success n gc α) (c : ge ≤ possibly := by decide) : Outcome ε n ⟨ge, gc⟩ α :=
+@[inline] def Outcome.ofSuccess (r : Success n gc α) (c : ge ≤ possibly := by decide) : Outcome ε n ⟨ge, gc⟩ α :=
   match ge with
   | never => r
   | possibly => .inr r
