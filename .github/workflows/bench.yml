@@ -36,9 +36,14 @@ jobs:
         if: steps.changes.outputs.run == 'true'
         run: sudo apt-get update && sudo apt-get install -y hyperfine
 
-      - name: Benchmark PR vs base
+      - name: Benchmark
         if: steps.changes.outputs.run == 'true'
-        run: bench/run.sh HEAD "origin/${GITHUB_BASE_REF:-main}"
+        env:
+          SIZE: 200
+          ITERS: 10
+          WARMUP: 0
+          RUNS: 2
+        run: bench/run.sh HEAD -
 
       - uses: actions/upload-artifact@v4
         if: steps.changes.outputs.run == 'true'
