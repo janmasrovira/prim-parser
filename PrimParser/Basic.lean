@@ -310,27 +310,23 @@ def bind
     have hm := m.sound t
     cases hmr : m.run t with
     | inl e =>
-      simp only [hmr] at hm ⊢
-      simp only [Grade.mul_mk, Outcome.Sound] at hm ⊢
+      simp only [hmr, Grade.mul_mk, Outcome.Sound] at hm ⊢
       exact le_sup_of_le_left hm
     | inr x =>
-      simp only [hmr] at hm ⊢
       have hf := (f x.result).sound x.restText
       cases hfr : (f x.result).run x.restText with
       | inl e =>
-        simp only [hfr] at hf ⊢
-        simp only [Grade.mul_mk, Outcome.Sound] at hf ⊢
+        simp only [hfr, Grade.mul_mk, Outcome.Sound] at hf ⊢
         exact le_sup_of_le_right hf
       | inr y =>
-        simp only [hfr] at hf ⊢
-        simp only [Grade.mul_mk, Outcome.Sound] at hf hm ⊢
+        simp only [hmr, hfr, Grade.mul_mk, Outcome.Sound] at hf hm ⊢
         exact sup_le hm hf
 
 instance : IsEmpty (Parser ε impossible α) where
   false p := by
     have h := p.sound (⟨[], rfl⟩ : Text 0)
     cases hr : p.run (⟨[], rfl⟩ : Text 0) with
-    | inl f => rw [hr] at h; simp only [Outcome.Sound] at h; exact absurd h (by decide)
+    | inl f => rw [hr] at h; exact absurd h (by decide : ¬ ((possibly : Necessity) ≤ never))
     | inr s => have := s.witness; simp only [consumptionWitness] at this; omega
 
 /-- Lift a value into a parser that consumes nothing and never fails. -/
@@ -596,10 +592,8 @@ def optional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement
   sound t := by
     match ge, p.run t, p.sound t with
     | never, .inl _, hs => exact absurd hs (by decide : ¬ ((possibly : Necessity) ≤ never))
-    | never, .inr r, _ => exact (by decide : (Necessity.never) ≤ possibly)
-    | always, _, _ => exact (by decide : (Necessity.never) ≤ possibly)
-    | possibly, .inl _, _ => exact (by decide : (Necessity.never) ≤ possibly)
-    | possibly, .inr r, _ => exact (by decide : (Necessity.never) ≤ possibly)
+    | never, .inr _, _ | always, _, _ | possibly, .inl _, _ | possibly, .inr _, _ =>
+        exact (by decide : (Necessity.never) ≤ possibly)
 
 /-- Try `p`; return the result on success or the default value `d` on failure. -/
 def optionalD (p : Parser ε ⟨ge, gc⟩ α) (d : α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ α :=
