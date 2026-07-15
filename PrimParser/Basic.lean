@@ -515,7 +515,7 @@ def string (str : String) : Parser Error conditional PUnit :=
   go str.toList
 
 /-- Try `p`; return `some result` on success or `none` on failure, never failing itself. -/
-def optional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ (Option α) where
+def optional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ~ ge ⊓ gc⟩ (Option α) where
   run t := match ge with
     | never => .some <$> p.run t
     | always => {result := .none, restText := t}
@@ -527,20 +527,20 @@ def optional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement
                    witness := r.witness.min_possibly}
 
 /-- Try `p`; return the result on success or the default value `d` on failure. -/
-def optionalD (p : Parser ε ⟨ge, gc⟩ α) (d : α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ α :=
+def optionalD (p : Parser ε ⟨ge, gc⟩ α) (d : α) : Parser ε ⟨never, ~ ge ⊓ gc⟩ α :=
   (·.getD d) <$>ᵍ optional p
 
 /-- Try `p` then apply `cont` to its result; wrap the final result in `Option`. -/
 def optionalBind
   (p : Parser ε ⟨ge, gc⟩ α)
   (cont : α → Parser ε ⟨ge', gc'⟩ β)
-  : Parser ε ⟨never, (ge ⊔ ge').complement ⊓ (gc ⊔ gc')⟩ (Option β) :=
+  : Parser ε ⟨never, ~ (ge ⊔ ge') ⊓ (gc ⊔ gc')⟩ (Option β) :=
   optional (gdo
     let a ← p
     cont a
     grade_by by simp)
 
-def test (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ Bool :=
+def test (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ~ ge ⊓ gc⟩ Bool :=
   Option.isSome <$>ᵍ optional p
 
 /-- Repeatedly apply `p` until `e` succeeds, collecting the results of `p`. -/
@@ -908,7 +908,7 @@ def lookahead (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge, never⟩ 
 def peek : Parser Error Grade.lookahead Char := lookahead anyChar
 
 /-- Succeed (without consuming) only when `p` fails. -/
-def notFollowedBy (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge.complement, never⟩ PUnit where
+def notFollowedBy (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨~ ge, never⟩ PUnit where
   run t := p.run t |>.handle
     (fun _ _ => Outcome.ofSuccess (c := by cases ge <;> first | contradiction | decide) {result := (), restText := t})
     (fun _ _ => Outcome.throw (h := by cases ge <;> first | contradiction | decide) Error.fail t)
