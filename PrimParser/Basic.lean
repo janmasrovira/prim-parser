@@ -142,8 +142,7 @@ def Failure.trans (f : Failure m ε) (h : m ≤ n) : Failure n ε where
 abbrev Outcome (ε : Type) (n : Nat) (g : Grade) (α : Type) : Type :=
   Failure n ε ⊕ Success n g.consumes α
 
-def Outcome.Sound {ε : Type} {n : Nat} {g : Grade} {α : Type}
-    (o : Outcome ε n g α) : Prop :=
+abbrev Outcome.Sound {g : Grade} {α : Type} (o : Outcome ε n g α) : Prop :=
   match o with
   | .inl _ => possibly ≤ g.errors
   | .inr _ => g.errors ≤ possibly
@@ -166,23 +165,26 @@ variable
   {gc gc': Necessity} -- used for `consumes`
 
 @[inline] def Outcome.handle
-  (o : Outcome ε n g α) (ho : o.Sound)
-  (e : possibly ≤ g.errors → Failure n ε → β)
-  (s : g.errors ≤ possibly → Success n g.consumes α → β)
+  (o : Outcome ε n g α)
+  (sound : Sound o)
+  (onError : possibly ≤ g.errors → Failure n ε → β)
+  (onSuccess : g.errors ≤ possibly → Success n g.consumes α → β)
   : β :=
-  match o, ho with
-  | .inl f, h => e h f
-  | .inr r, h => s h r
+  match o with
+  | .inl f => onError sound f
+  | .inr r => onSuccess sound r
 
-theorem Outcome.handle_sound {g' : Grade} {m : Nat}
-  (o : Outcome ε n g α) (ho : o.Sound)
-  (e : possibly ≤ g.errors → Failure n ε → Outcome ε' m g' β)
-  (s : g.errors ≤ possibly → Success n g.consumes α → Outcome ε' m g' β)
-  (he : ∀ h f, (e h f).Sound) (hs : ∀ h r, (s h r).Sound)
-  : (o.handle ho e s).Sound :=
-  match o, ho with
-  | .inl f, h => he h f
-  | .inr r, h => hs h r
+theorem Outcome.handle_sound
+  {o : Outcome ε n g α}
+  (sound : Sound o)
+  (onError : possibly ≤ g.errors → Failure n ε → Outcome ε' m g' β)
+  (onSuccess : g.errors ≤ possibly → Success n g.consumes α → Outcome ε' m g' β)
+  (he : ∀ h f, Sound (onError h f))
+  (hs : ∀ h r, Sound (onSuccess h r))
+  : Sound (o.handle sound onError onSuccess) :=
+  match o with
+  | .inl f => he sound f
+  | .inr r => hs sound r
 
 instance : Functor (Success n gc) where
   map f x := {x with result := f x.result}
@@ -195,9 +197,9 @@ instance : Functor (Outcome ε n g) where
     | .inl e => .inl e
     | .inr r => .inr (f <$> r)
 
-theorem Outcome.map_sound (f : α → β) (o : Outcome ε n g α) (ho : o.Sound)
-  : (f <$> o).Sound := by
-  cases o <;> simpa [Functor.map, Outcome.Sound] using ho
+theorem Outcome.map_sound (f : α → β) (o : Outcome ε n g α) (ho : Sound o)
+  : Sound (f <$> o) := by
+  cases o <;> simpa using ho
 
 def Error.eof : Error := "eof"
 def Error.fail : Error := "fail"
@@ -218,30 +220,6 @@ def Success.trans (s : Success m gc α) (h : m ≤ n) : Success n (gc ⊔ possib
   witness := by
     have w := s.witness
     cases gc <;> omega
-
-def Success.ap
-  (r1 : Success n gc (α → β))
-  (r2 : Success r1.restSize gc' α)
-  : Success n (gc ⊔ gc') β where
-  result := r1.result r2.result
-  restSize := r2.restSize
-  restText := r2.restText
-  witness := by
-    have w1 := r1.witness
-    have w2 := r2.witness
-    cases gc <;> cases gc' <;> omega
-
-def Success.ap'
-  (r1 : Success n gc α)
-  (r2 : Success r1.restSize gc' (α → β))
-  : Success n (gc ⊔ gc') β where
-  result := r2.result r1.result
-  restSize := r2.restSize
-  restText := r2.restText
-  witness := by
-    have w1 := r1.witness
-    have w2 := r2.witness
-    cases gc <;> cases gc' <;> omega
 
 def Success.seq
   (r1 : Success n gc α)
@@ -264,35 +242,38 @@ def Success.seq
   | .inr y => .inr (x.seq y)
 
 instance : GradedFunctor (Parser ε) where
-  gmap f p := ⟨fun t => f <$> p.run t, fun t => Outcome.map_sound f (p.run t) (p.sound t)⟩
+  gmap f p := {
+    run t := f <$> p.run t
+    sound t := Outcome.map_sound f (p.run t) (p.sound t)
+  }
 
-@[inline] def Outcome.throwFailure (f : Failure n ε) (h : possibly ≤ g.errors := by simp) : Outcome ε n g α :=
+@[inline] def Outcome.throwFailure (f : Failure n ε) : Outcome ε n g α :=
   .inl f
 
-theorem Outcome.throwFailure_sound {α : Type} (f : Failure n ε) (h : possibly ≤ g.errors)
-  : (Outcome.throwFailure (α := α) (g := g) f h).Sound := h
+theorem Outcome.throwFailure_sound {f : Failure n ε} (h : possibly ≤ g.errors)
+  : Sound (Outcome.throwFailure (α := α) (g := g) f) := h
 
-def Outcome.throw (e : ε) (t : Text n) (h : possibly ≤ g.errors := by simp) : Outcome ε n g α :=
-  Outcome.throwFailure ⟨e, t, by simp⟩ h
+def Outcome.throw (e : ε) (t : Text n) : Outcome ε n g α :=
+  Outcome.throwFailure { error := e, restText := t, witness := by simp }
 
-theorem Outcome.throw_sound {α : Type} (e : ε) (t : Text n) (h : possibly ≤ g.errors)
-  : (Outcome.throw (α := α) (g := g) e t h).Sound := h
+theorem Outcome.throw_sound (e : ε) (t : Text n) (h : possibly ≤ g.errors)
+  : Sound (Outcome.throw (α := α) (g := g) e t) := h
 
-@[inline] def Outcome.ofSuccess (r : Success n gc α) (c : ge ≤ possibly := by decide) : Outcome ε n ⟨ge, gc⟩ α :=
+@[inline] def Outcome.ofSuccess (r : Success n gc α) : Outcome ε n ⟨ge, gc⟩ α :=
   .inr r
 
-theorem Outcome.ofSuccess_sound {ε : Type} (r : Success n gc α) (c : ge ≤ possibly)
-  : (Outcome.ofSuccess (ε := ε) r c).Sound := c
+theorem Outcome.ofSuccess_sound {r : Success n gc α} (c : ge ≤ possibly)
+  : Sound (Outcome.ofSuccess (ε := ε) (ge := ge) r) := c
 
-@[inline] def onOutcome {g' : Grade}
+@[inline] def onOutcome
   (p : Parser ε g α)
-  (e : ∀ {n}, Text n → possibly ≤ g.errors → Failure n ε → Outcome ε' n g' β)
-  (s : ∀ {n}, Text n → g.errors ≤ possibly → Success n g.consumes α → Outcome ε' n g' β)
-  (he : ∀ {n} (t : Text n) h f, (e t h f).Sound)
-  (hs : ∀ {n} (t : Text n) h r, (s t h r).Sound)
+  (onError : ∀ {n}, Text n → possibly ≤ g.errors → Failure n ε → Outcome ε' n g' β)
+  (onSuccess : ∀ {n}, Text n → g.errors ≤ possibly → Success n g.consumes α → Outcome ε' n g' β)
+  (he : ∀ {n} (t : Text n) h f, Outcome.Sound (onError t h f))
+  (hs : ∀ {n} (t : Text n) h r, Outcome.Sound (onSuccess t h r))
   : Parser ε' g' β where
-  run t := (p.run t).handle (p.sound t) (e t) (s t)
-  sound t := Outcome.handle_sound _ (p.sound t) (e t) (s t) (he t) (hs t)
+  run t := (p.run t).handle (p.sound t) (onError t) (onSuccess t)
+  sound t := Outcome.handle_sound (p.sound t) (onError t) (onSuccess t) (he t) (hs t)
 
 /-- Monadic bind for parsers. The resulting grade is the product (max)
 of the two grades. -/
@@ -302,7 +283,7 @@ def bind
   : Parser ε (g * g') β where
   run t := match m.run t with
     | .inl e => .inl e
-    | .inr x => match (f x.result).run x.restText with
+    | .inr x => match f x.result |>.run x.restText with
       | .inl e => .inl (e.trans x.le)
       | .inr y => .inr (x.seq y)
   sound t := by
@@ -310,55 +291,58 @@ def bind
     have hm := m.sound t
     cases hmr : m.run t with
     | inl e =>
-      simp only [hmr, Grade.mul_mk, Outcome.Sound] at hm ⊢
+      simp only [hmr] at hm
       exact le_sup_of_le_left hm
     | inr x =>
-      have hf := (f x.result).sound x.restText
-      cases hfr : (f x.result).run x.restText with
+      have hf := f x.result |>.sound x.restText
+      cases hfr : f x.result |>.run x.restText with
       | inl e =>
-        simp only [hfr, Grade.mul_mk, Outcome.Sound] at hf ⊢
+        simp only [hfr] at hf ⊢
         exact le_sup_of_le_right hf
       | inr y =>
-        simp only [hmr, hfr, Grade.mul_mk, Outcome.Sound] at hf hm ⊢
+        simp only [hmr, hfr] at hf hm ⊢
         exact sup_le hm hf
 
 instance : IsEmpty (Parser ε impossible α) where
   false p := by
     have h := p.sound (⟨[], rfl⟩ : Text 0)
     cases hr : p.run (⟨[], rfl⟩ : Text 0) with
-    | inl f => rw [hr] at h; exact absurd h (by decide : ¬ ((possibly : Necessity) ≤ never))
-    | inr s => have := s.witness; simp only [consumptionWitness] at this; omega
+    | inl f => rw [hr] at h; contradiction
+    | inr s => have := s.witness; omega
 
 /-- Lift a value into a parser that consumes nothing and never fails. -/
 abbrev pure (a : α) : Parser ε 1 α where
-  run t := Outcome.ofSuccess (ge := never) ⟨a, t, rfl⟩ (by decide)
-  sound t := Outcome.ofSuccess_sound _ (by decide)
+  run t := Outcome.ofSuccess (ge := never) { result := a, restText := t, witness := rfl }
+  sound t := Outcome.ofSuccess_sound (by decide)
 
 instance : GradedApplicative (Parser ε) where
   gpure := pure
   gseq f g := bind f fun f' =>
-    ⟨fun t => f' <$> (g ()).run t, fun t => Outcome.map_sound f' ((g ()).run t) ((g ()).sound t)⟩
+    { run := fun t => f' <$> (g ()).run t
+      sound := fun t => Outcome.map_sound f' ((g ()).run t) ((g ()).sound t) }
 
 instance : GradedMonad (Parser ε) where
   gbind := bind
 
-private def fixGo [Inhabited ε] (h : possibly ≤ ge)
+-- `Inhabited ε` is needed to throw a `default` error on empty input
+private def fixGo [Inhabited ε]
+    (h : possibly ≤ ge)
     (f : Parser ε ⟨ge, always⟩ α → Parser ε ⟨ge, always⟩ α)
-    (n : Nat) (t : Text n) : {o : Outcome ε n ⟨ge, always⟩ α // o.Sound} :=
+    (n : Nat)
+    (t : Text n)
+    : {o : Outcome ε n ⟨ge, always⟩ α // Outcome.Sound o} :=
   match n, t with
-  | 0, t => ⟨Outcome.throw (h := h) default t, Outcome.throw_sound _ _ h⟩
+  | 0, t => ⟨Outcome.throw default t, Outcome.throw_sound _ _ h⟩
   | m + 1, t =>
     let self : Parser ε ⟨ge, always⟩ α :=
       { run := fun {k} t' =>
-          if hk : k ≤ m then (fixGo h f k t').val
-          else Outcome.throw (h := h) default t'
+          if hk : k ≤ m then fixGo h f k t' |>.val
+          else Outcome.throw default t'
         sound := fun {k} t' => by
           split
-          · exact (fixGo h f k t').property
+          · exact fixGo h f k t' |>.property
           · exact Outcome.throw_sound _ _ h }
-    ⟨(f self).run t, (f self).sound t⟩
-  termination_by n
-  decreasing_by all_goals omega
+    ⟨f self |>.run t, f self |>.sound t⟩
 
 /-- Build a recursive parser via a fixpoint. Termination is guaranteed by
 requiring the body to always consume input. -/
@@ -366,7 +350,8 @@ def fix [Inhabited ε]
   (f : Parser ε ⟨ge, always⟩ α → Parser ε ⟨ge, always⟩ α)
   (h : possibly ≤ ge := by simp)
   : Parser ε ⟨ge, always⟩ α :=
-  ⟨fun t => (fixGo h f _ t).val, fun t => (fixGo h f _ t).property⟩
+  { run := fun t => fixGo h f _ t |>.val
+    sound := fun t => fixGo h f _ t |>.property }
 
 private theorem consumptionWitness.ite_right
   (c : possibly ≤ ge')
@@ -383,29 +368,31 @@ private theorem consumptionWitness.ite_left
 /-- Run `p`. If it fails, restores the original text. -/
 def withBacktracking {g} (p : Parser ε g α) : Parser ε g α :=
   p.onOutcome
-    (fun t h f => Outcome.throwFailure (h := h) ⟨f.error, t, Nat.le_refl _⟩)
-    (fun _ h s => Outcome.ofSuccess (c := h) s)
-    (fun _ h _ => Outcome.throwFailure_sound _ h)
-    (fun _ h _ => Outcome.ofSuccess_sound _ h)
+    (fun t _ f => Outcome.throwFailure { error := f.error, restText := t, witness := by simp })
+    (fun _ _ s => Outcome.ofSuccess s)
+    (fun _ h _ => Outcome.throwFailure_sound h)
+    (fun _ h _ => Outcome.ofSuccess_sound h)
 
 /-- Try `p1`; if it fails, try `p2`. The error grade is the infimum and
 the consumption grade is computed via `Necessity.ite`. -/
 def choice
   (p1 : Parser ε ⟨ge, gc⟩ α)
   (p2 : Parser ε ⟨ge', gc'⟩ α)
+  -- TODO review 18 begin
   : Parser ε ⟨ge ⊓ ge', ge.ite gc' gc⟩ α :=
   p1.onOutcome
     (fun t hge _ =>
       p2.run t |>.handle (p2.sound t)
-        (fun hge' f' => Outcome.throwFailure (h := le_inf hge hge') f')
-        (fun hge' s' => Outcome.ofSuccess (c := inf_le_right.trans hge')
+        (fun _ f' => Outcome.throwFailure f')
+        (fun _ s' => Outcome.ofSuccess
           { s' with witness := consumptionWitness.ite_right hge s'.witness }))
-    (fun _ hge s => Outcome.ofSuccess (c := inf_le_left.trans hge)
+    (fun _ hge s => Outcome.ofSuccess
       { s with witness := consumptionWitness.ite_left hge s.witness })
-    (fun t hge f => Outcome.handle_sound _ (p2.sound t) _ _
+    (fun t hge _f => Outcome.handle_sound (p2.sound t) _ _
       (fun hge' _ => le_inf hge hge')
       (fun hge' _ => inf_le_right.trans hge'))
     (fun _ hge _ => inf_le_left.trans hge)
+  -- TODO review 18 end
 
 infixl:20 " <|> " => choice
 
@@ -413,46 +400,58 @@ infixl:20 " <|> " => choice
 def committedChoice
   (p1 : Parser ε ⟨ge, gc⟩ α)
   (p2 : Parser ε ⟨ge', gc'⟩ α)
+  -- TODO review 19 begin
   : Parser ε ⟨ge ⊓ (ge' ⊔ possibly), ge.ite gc' gc⟩ α :=
   p1.onOutcome
     (fun {n} t hge f =>
+  -- TODO review 19 end
       if f.restSize = n then
+        -- TODO review 20 begin
         p2.run t |>.handle (p2.sound t)
-          (fun hge' f' => Outcome.throwFailure (h := le_inf hge le_sup_right) f')
-          (fun hge' s' => Outcome.ofSuccess (c := inf_le_right.trans (sup_le hge' le_rfl))
+          (fun hge' f' => Outcome.throwFailure f')
+          (fun hge' s' => Outcome.ofSuccess
             { s' with witness := consumptionWitness.ite_right hge s'.witness })
+        -- TODO review 20 end
       else
-        Outcome.throwFailure (h := le_inf hge le_sup_right) f)
-    (fun _ hge s => Outcome.ofSuccess (c := inf_le_left.trans hge)
+        -- TODO review 21 begin
+        Outcome.throwFailure f)
+    (fun _ hge s => Outcome.ofSuccess
       { s with witness := consumptionWitness.ite_left hge s.witness })
     (fun {n} t hge f => by
       show Outcome.Sound (if f.restSize = n then _ else _)
       split
-      · exact Outcome.handle_sound _ (p2.sound t) _ _
+      · exact Outcome.handle_sound (p2.sound t) _ _
           (fun hge' _ => le_inf hge le_sup_right)
           (fun hge' _ => inf_le_right.trans (sup_le hge' le_rfl))
       · exact le_inf hge le_sup_right)
     (fun _ hge _ => inf_le_left.trans hge)
+        -- TODO review 21 end
 
 /-- Try `p1` first, if it fails with `Failure f`, run `p2` on `f.restText` -/
 def tryResume
   (p1 : Parser ε ⟨ge, gc⟩ α)
   (p2 : Parser ε ⟨ge', gc'⟩ α)
+  -- TODO review 22 begin
   : Parser ε ⟨ge ⊓ ge', ge.ite (gc' ⊔ possibly) gc⟩ α :=
   p1.onOutcome
     (fun _ hge f =>
       p2.run f.restText |>.handle (p2.sound f.restText)
-        (fun hge' f' => Outcome.throwFailure (h := le_inf hge hge') (f'.trans f.witness))
-        (fun hge' s' =>
+        (fun _ f' => Outcome.throwFailure (f'.trans f.witness))
+  -- TODO review 22 end
+        (fun _ s' =>
           let lifted := s'.trans f.witness
-          Outcome.ofSuccess (c := inf_le_right.trans hge')
+          -- TODO review 23 begin
+          Outcome.ofSuccess
+          -- TODO review 23 end
             { lifted with witness := consumptionWitness.ite_right hge lifted.witness }))
-    (fun _ hge s => Outcome.ofSuccess (c := inf_le_left.trans hge)
+    -- TODO review 24 begin
+    (fun _ hge s => Outcome.ofSuccess
       { s with witness := consumptionWitness.ite_left hge s.witness })
-    (fun _ hge f => Outcome.handle_sound _ (p2.sound f.restText) _ _
+    (fun _ hge f => Outcome.handle_sound (p2.sound f.restText) _ _
       (fun hge' _ => le_inf hge hge')
       (fun hge' _ => inf_le_right.trans hge'))
     (fun _ hge _ => inf_le_left.trans hge)
+    -- TODO review 24 end
 
 /-- Try each parser in the list in order, returning the first success. -/
 def oneOf (l : NonEmptyList (Parser ε g α)) : Parser ε g α :=
@@ -465,8 +464,10 @@ def oneOf (l : NonEmptyList (Parser ε g α)) : Parser ε g α :=
 
 /-- A parser that always fails with error `e`. -/
 def throw (e : ε) (c : possibly ≤ ge := by simp) : Parser ε ⟨ge, gc⟩ α where
-  run t := Outcome.throw (h := c) e t
-  sound t := Outcome.throw_sound _ _ c
+  run t := Outcome.throw e t
+  -- TODO review 25 begin
+  sound _t := Outcome.throw_sound _ _ c
+  -- TODO review 25 end
 
 def Success.relaxConsumes (p : Success n gc α) : Success n (gc ⊓ possibly) α :=
   match gc with
@@ -475,40 +476,48 @@ def Success.relaxConsumes (p : Success n gc α) : Success n (gc ⊓ possibly) α
   | always => { p with witness := le_of_lt p.witness }
 
 /-- Weaken the consumption grade by capping at `possibly`. -/
+-- TODO review 26 begin
 def relaxConsumes (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge, gc ⊓ possibly⟩ α :=
   p.onOutcome
-    (fun _ h f => Outcome.throwFailure (h := h) f)
-    (fun _ h r => Outcome.ofSuccess (c := h) r.relaxConsumes)
+    (fun _ _ f => Outcome.throwFailure f)
+    (fun _ _ r => Outcome.ofSuccess r.relaxConsumes)
     (fun _ h _ => h)
     (fun _ h _ => h)
+-- TODO review 26 end
 
 /-- Weaken the error grade by capping at `possibly`. -/
+-- TODO review 27 begin
 def relaxErrors (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge ⊓ possibly, gc⟩ α :=
   p.onOutcome
-    (fun _ h f => Outcome.throwFailure (h := le_inf h le_rfl) f)
-    (fun _ _ r => Outcome.ofSuccess (c := inf_le_right) r)
-    (fun _ h _ => Outcome.throwFailure_sound _ (le_inf h le_rfl))
-    (fun _ _ _ => Outcome.ofSuccess_sound _ inf_le_right)
+    (fun _ _ f => Outcome.throwFailure f)
+    (fun _ _ r => Outcome.ofSuccess r)
+    (fun _ h _ => Outcome.throwFailure_sound (le_inf h le_rfl))
+    (fun _ _ _ => Outcome.ofSuccess_sound inf_le_right)
+-- TODO review 27 end
 
 /-- Cap both error and consumption grades at `possibly`. -/
 def relax (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge ⊓ possibly, gc ⊓ possibly⟩ α :=
   p.relaxErrors.relaxConsumes
 
 /-- Forget consumption precision, setting it to `possibly`. -/
+-- TODO review 28 begin
 def weakenConsumes (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge, possibly⟩ α :=
   p.onOutcome
-    (fun _ h f => Outcome.throwFailure (h := h) f)
-    (fun _ h r => Outcome.ofSuccess (c := h) r.weakenConsumes)
+    (fun _ _ f => Outcome.throwFailure f)
+    (fun _ _ r => Outcome.ofSuccess r.weakenConsumes)
     (fun _ h _ => h)
     (fun _ h _ => h)
+-- TODO review 28 end
 
 /-- Forget error precision, setting it to `possibly`. -/
+-- TODO review 29 begin
 def weakenErrors (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨possibly, gc⟩ α :=
   p.onOutcome
-    (fun _ _ f => Outcome.throwFailure (h := le_refl _) f)
-    (fun _ _ r => Outcome.ofSuccess (c := le_refl _) r)
-    (fun _ _ _ => Outcome.throwFailure_sound _ (le_refl _))
-    (fun _ _ _ => Outcome.ofSuccess_sound _ (le_refl _))
+    (fun _ _ f => Outcome.throwFailure f)
+    (fun _ _ r => Outcome.ofSuccess r)
+    (fun _ _ _ => Outcome.throwFailure_sound (le_refl _))
+    (fun _ _ _ => Outcome.ofSuccess_sound (le_refl _))
+-- TODO review 29 end
 
 /-- Weaken both grades to `possibly`, yielding a `fallible` parser. -/
 def weaken (p : Parser ε ⟨ge, gc⟩ α) : Parser ε fallible α :=
@@ -516,26 +525,32 @@ def weaken (p : Parser ε ⟨ge, gc⟩ α) : Parser ε fallible α :=
 
 /-- Run a parser, discarding the error and returning the `Success` as an `Option`. -/
 def runOption (p : Parser ε ⟨ge, gc⟩ α) (t : Text n) : Option (Success n gc α) :=
+  -- TODO review 30 begin
   p.run t |>.handle (p.sound t) (fun _ _ => .none) (fun _ r => .some r)
+  -- TODO review 30 end
 
 /-- Run a parser, returning only the parsed value as an `Option`. -/
 def runResult? (p : Parser ε ⟨ge, gc⟩ α) (t : Text n) : Option α :=
+  -- TODO review 31 begin
   p.run t |>.handle (p.sound t) (fun _ _ => .none) (fun _ r => .some r.result)
 
 theorem Outcome.sound_of_errors_eq_possibly (o : Outcome ε n g α) (hg : g.errors = possibly)
-  : o.Sound := by cases o <;> simp [Outcome.Sound, hg]
+  : Sound o := by cases o <;> simp [Outcome.Sound, hg]
+  -- TODO review 31 end
 
 /-- Consume and return a single character, or fail on empty input. -/
 def anyChar : Parser Error conditional Char where
   run {n} t :=
     match n, t with
-    | 0, .nil => .inl ⟨Error.eof, .nil, by simp⟩
+    | 0, .nil => .inl { error := Error.eof, restText := .nil, witness := by simp }
     | Nat.succ n, ⟨c :: cs, p⟩ =>
       .inr {result := c
             restSize := n
             restText := by refine ⟨cs, by simpa [List.length_cons] using p⟩
             witness := by simp}
+  -- TODO review 32 begin
   sound t := Outcome.sound_of_errors_eq_possibly _ rfl
+  -- TODO review 32 end
 
 /-- Like `gpure` but with a flexible grade: both `ge` and `gc` can be `never`
 or `possibly`. Useful in match branches where all cases must share the same grade. -/
@@ -581,6 +596,7 @@ def string (str : String) : Parser Error conditional PUnit :=
 
 /-- Try `p`; return `some result` on success or `none` on failure, never failing itself. -/
 def optional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ (Option α) where
+  -- TODO review 33 begin
   run t := match ge, p.run t, p.sound t with
     | never, .inl _, hs => absurd hs (by decide : ¬ ((possibly : Necessity) ≤ never))
     | never, .inr r, _ =>
@@ -594,6 +610,7 @@ def optional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement
     | never, .inl _, hs => exact absurd hs (by decide : ¬ ((possibly : Necessity) ≤ never))
     | never, .inr _, _ | always, _, _ | possibly, .inl _, _ | possibly, .inr _, _ =>
         exact (by decide : (Necessity.never) ≤ possibly)
+  -- TODO review 33 end
 
 /-- Try `p`; return the result on success or the default value `d` on failure. -/
 def optionalD (p : Parser ε ⟨ge, gc⟩ α) (d : α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ α :=
@@ -640,8 +657,10 @@ def many (p : Parser ε ⟨ge, always⟩ α) : Parser ε flexible (List α) wher
         {result := r.result :: rest.result
          restText := rest.restText
          witness := by have := rest.witness; omega}
-    fun t => Outcome.ofSuccess (ge := never) (go p t) (by decide)
-  sound t := Outcome.ofSuccess_sound _ (by decide)
+    -- TODO review 34 begin
+    fun t => Outcome.ofSuccess (ge := never) (go p t)
+  sound t := Outcome.ofSuccess_sound (by decide)
+    -- TODO review 34 end
 
 
 /-- Apply `p` one or more times, collecting results. -/
@@ -968,42 +987,54 @@ def eof : Parser Error lookahead PUnit where
   run {n} t := match n with
    | .zero => ok () |>.run t
    | _ => throw Error.fail |>.run t
+  -- TODO review 35 begin
   sound t := Outcome.sound_of_errors_eq_possibly _ rfl
+  -- TODO review 35 end
 
 /-- Run `p` without consuming input, keeping only the result. -/
+-- TODO review 36 begin
 def lookahead (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge, never⟩ α :=
   p.onOutcome
-    (fun _ h f => Outcome.throwFailure (h := h) f)
-    (fun t h r => Outcome.ofSuccess (c := h) {result := r.result, restText := t})
+    (fun _ h f => Outcome.throwFailure f)
+    (fun t h r => Outcome.ofSuccess {result := r.result, restText := t})
     (fun _ h _ => h)
     (fun _ h _ => h)
+-- TODO review 36 end
 
 def peek : Parser Error Grade.lookahead Char := lookahead anyChar
 
 /-- Succeed (without consuming) only when `p` fails. -/
+-- TODO review 37 begin
 def notFollowedBy (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge.complement, never⟩ PUnit :=
   p.onOutcome
-    (fun t h _ => Outcome.ofSuccess (c := Necessity.compl_le h) {result := (), restText := t})
-    (fun t h _ => Outcome.throw (h := Necessity.le_compl h) Error.fail t)
+    (fun t h _ => Outcome.ofSuccess {result := (), restText := t})
+    (fun t h _ => Outcome.throw Error.fail t)
     (fun _ h _ => Necessity.compl_le h)
     (fun _ h _ => Necessity.le_compl h)
+-- TODO review 37 end
 
 /-- Run `p`; if it fails with error `e`, run `recover e`. If recovery also
 fails, report `p`'s original error. -/
 def withRecovery
   (recover : ε' → Parser ε ⟨ge, gc⟩ α)
   (p : Parser ε' ⟨ge', gc'⟩ α)
+  -- TODO review 38 begin
   : Parser ε' ⟨ge ⊓ ge', ge'.ite gc gc'⟩ α :=
   p.onOutcome
     (fun t h f => recover f.error |>.run t |>.handle ((recover f.error).sound t)
-      (fun h' _ => Outcome.throwFailure (h := le_inf h' h) f)
-      (fun h' r => Outcome.ofSuccess (c := inf_le_left.trans h')
+      (fun _ _ => Outcome.throwFailure f)
+      (fun _ r => Outcome.ofSuccess
+  -- TODO review 38 end
         { r with witness := consumptionWitness.ite_right h r.witness }))
-    (fun _ h r => Outcome.ofSuccess (c := inf_le_right.trans h)
+    -- TODO review 39 begin
+    (fun _ h r => Outcome.ofSuccess
+    -- TODO review 39 end
       { r with witness := consumptionWitness.ite_left h r.witness })
-    (fun t h f => Outcome.handle_sound _ ((recover f.error).sound t) _ _
+    -- TODO review 40 begin
+    (fun t h f => Outcome.handle_sound ((recover f.error).sound t) _ _
       (fun h' _ => le_inf h' h)
       (fun h' _ => inf_le_left.trans h'))
     (fun _ h _ => inf_le_right.trans h)
+    -- TODO review 40 end
 
 end Parser
