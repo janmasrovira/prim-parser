@@ -179,12 +179,12 @@ theorem Outcome.handle_sound
   (sound : Sound o)
   (onError : possibly ≤ g.errors → Failure n ε → Outcome ε' m g' β)
   (onSuccess : g.errors ≤ possibly → Success n g.consumes α → Outcome ε' m g' β)
-  (he : ∀ h f, Sound (onError h f))
-  (hs : ∀ h r, Sound (onSuccess h r))
+  (soundError : ∀ h f, Sound (onError h f))
+  (soundSuccess : ∀ h r, Sound (onSuccess h r))
   : Sound (o.handle sound onError onSuccess) :=
   match o with
-  | .inl f => he sound f
-  | .inr r => hs sound r
+  | .inl f => soundError sound f
+  | .inr r => soundSuccess sound r
 
 instance : Functor (Success n gc) where
   map f x := {x with result := f x.result}
@@ -265,15 +265,15 @@ theorem Outcome.throw_sound (e : ε) (t : Text n) (h : possibly ≤ g.errors)
 theorem Outcome.ofSuccess_sound {r : Success n gc α} (c : ge ≤ possibly)
   : Sound (Outcome.ofSuccess (ε := ε) (ge := ge) r) := c
 
-@[inline] def onOutcome
+@[inline] def handle
   (p : Parser ε g α)
   (onError : ∀ {n}, Text n → possibly ≤ g.errors → Failure n ε → Outcome ε' n g' β)
   (onSuccess : ∀ {n}, Text n → g.errors ≤ possibly → Success n g.consumes α → Outcome ε' n g' β)
-  (he : ∀ {n} (t : Text n) h f, Outcome.Sound (onError t h f))
-  (hs : ∀ {n} (t : Text n) h r, Outcome.Sound (onSuccess t h r))
+  (soundError : ∀ {n} (t : Text n) h f, Outcome.Sound (onError t h f))
+  (soundSuccess : ∀ {n} (t : Text n) h r, Outcome.Sound (onSuccess t h r))
   : Parser ε' g' β where
-  run t := (p.run t).handle (p.sound t) (onError t) (onSuccess t)
-  sound t := Outcome.handle_sound (p.sound t) (onError t) (onSuccess t) (he t) (hs t)
+  run t := p.run t |>.handle (p.sound t) (onError t) (onSuccess t)
+  sound t := Outcome.handle_sound (p.sound t) (onError t) (onSuccess t) (soundError t) (soundSuccess t)
 
 /-- Monadic bind for parsers. The resulting grade is the product (max)
 of the two grades. -/
@@ -367,20 +367,19 @@ private theorem consumptionWitness.ite_left
 
 /-- Run `p`. If it fails, restores the original text. -/
 def withBacktracking {g} (p : Parser ε g α) : Parser ε g α :=
-  p.onOutcome
+  p.handle
     (fun t _ f => Outcome.throwFailure { error := f.error, restText := t, witness := by simp })
     (fun _ _ s => Outcome.ofSuccess s)
     (fun _ h _ => Outcome.throwFailure_sound h)
     (fun _ h _ => Outcome.ofSuccess_sound h)
 
-/-- Try `p1`; if it fails, try `p2`. The error grade is the infimum and
-the consumption grade is computed via `Necessity.ite`. -/
+/-- Try `p1`; if it fails, run `p2`. -/
 def choice
   (p1 : Parser ε ⟨ge, gc⟩ α)
   (p2 : Parser ε ⟨ge', gc'⟩ α)
   -- TODO review 18 begin
   : Parser ε ⟨ge ⊓ ge', ge.ite gc' gc⟩ α :=
-  p1.onOutcome
+  p1.handle
     (fun t hge _ =>
       p2.run t |>.handle (p2.sound t)
         (fun _ f' => Outcome.throwFailure f')
@@ -402,7 +401,7 @@ def committedChoice
   (p2 : Parser ε ⟨ge', gc'⟩ α)
   -- TODO review 19 begin
   : Parser ε ⟨ge ⊓ (ge' ⊔ possibly), ge.ite gc' gc⟩ α :=
-  p1.onOutcome
+  p1.handle
     (fun {n} t hge f =>
   -- TODO review 19 end
       if f.restSize = n then
@@ -433,7 +432,7 @@ def tryResume
   (p2 : Parser ε ⟨ge', gc'⟩ α)
   -- TODO review 22 begin
   : Parser ε ⟨ge ⊓ ge', ge.ite (gc' ⊔ possibly) gc⟩ α :=
-  p1.onOutcome
+  p1.handle
     (fun _ hge f =>
       p2.run f.restText |>.handle (p2.sound f.restText)
         (fun _ f' => Outcome.throwFailure (f'.trans f.witness))
@@ -478,7 +477,7 @@ def Success.relaxConsumes (p : Success n gc α) : Success n (gc ⊓ possibly) α
 /-- Weaken the consumption grade by capping at `possibly`. -/
 -- TODO review 26 begin
 def relaxConsumes (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge, gc ⊓ possibly⟩ α :=
-  p.onOutcome
+  p.handle
     (fun _ _ f => Outcome.throwFailure f)
     (fun _ _ r => Outcome.ofSuccess r.relaxConsumes)
     (fun _ h _ => h)
@@ -488,7 +487,7 @@ def relaxConsumes (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge, gc ⊓ poss
 /-- Weaken the error grade by capping at `possibly`. -/
 -- TODO review 27 begin
 def relaxErrors (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge ⊓ possibly, gc⟩ α :=
-  p.onOutcome
+  p.handle
     (fun _ _ f => Outcome.throwFailure f)
     (fun _ _ r => Outcome.ofSuccess r)
     (fun _ h _ => Outcome.throwFailure_sound (le_inf h le_rfl))
@@ -502,7 +501,7 @@ def relax (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge ⊓ possibly, gc ⊓
 /-- Forget consumption precision, setting it to `possibly`. -/
 -- TODO review 28 begin
 def weakenConsumes (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge, possibly⟩ α :=
-  p.onOutcome
+  p.handle
     (fun _ _ f => Outcome.throwFailure f)
     (fun _ _ r => Outcome.ofSuccess r.weakenConsumes)
     (fun _ h _ => h)
@@ -512,7 +511,7 @@ def weakenConsumes (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge, possibly�
 /-- Forget error precision, setting it to `possibly`. -/
 -- TODO review 29 begin
 def weakenErrors (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨possibly, gc⟩ α :=
-  p.onOutcome
+  p.handle
     (fun _ _ f => Outcome.throwFailure f)
     (fun _ _ r => Outcome.ofSuccess r)
     (fun _ _ _ => Outcome.throwFailure_sound (le_refl _))
@@ -994,7 +993,7 @@ def eof : Parser Error lookahead PUnit where
 /-- Run `p` without consuming input, keeping only the result. -/
 -- TODO review 36 begin
 def lookahead (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge, never⟩ α :=
-  p.onOutcome
+  p.handle
     (fun _ h f => Outcome.throwFailure f)
     (fun t h r => Outcome.ofSuccess {result := r.result, restText := t})
     (fun _ h _ => h)
@@ -1006,7 +1005,7 @@ def peek : Parser Error Grade.lookahead Char := lookahead anyChar
 /-- Succeed (without consuming) only when `p` fails. -/
 -- TODO review 37 begin
 def notFollowedBy (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge.complement, never⟩ PUnit :=
-  p.onOutcome
+  p.handle
     (fun t h _ => Outcome.ofSuccess {result := (), restText := t})
     (fun t h _ => Outcome.throw Error.fail t)
     (fun _ h _ => Necessity.compl_le h)
@@ -1020,7 +1019,7 @@ def withRecovery
   (p : Parser ε' ⟨ge', gc'⟩ α)
   -- TODO review 38 begin
   : Parser ε' ⟨ge ⊓ ge', ge'.ite gc gc'⟩ α :=
-  p.onOutcome
+  p.handle
     (fun t h f => recover f.error |>.run t |>.handle ((recover f.error).sound t)
       (fun _ _ => Outcome.throwFailure f)
       (fun _ r => Outcome.ofSuccess
