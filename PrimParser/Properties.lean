@@ -9,27 +9,27 @@ Lawful instances for `Success`, `Outcome`, and `Parser`:
 
 namespace Parser
 
--- TODO review 42 begin
-variable {α β γ ε : Type} {n m : Nat} {g : Grade} {ge gc : Necessity}
+variable
+  {α β γ ε : Type}
+  {n m : Nat}
+  {g : Grade}
+  {ge gc : Necessity}
 
 @[ext] theorem ext {p q : Parser ε g α}
     (h : ∀ {m} (t : Text m), p.run t = q.run t) : p = q := by
   obtain ⟨pr, ps⟩ := p; obtain ⟨qr, qs⟩ := q
   have hr : @pr = @qr := by funext m t; exact h t
   subst hr; rfl
--- TODO review 42 end
 
 instance : LawfulFunctor (Success n gc) where
   map_const := rfl
   id_map x := by cases x; rfl
   comp_map g h x := by cases x; rfl
 
-instance : LawfulFunctor (Outcome ε n g) where
-  -- TODO review 43 begin
+instance : LawfulFunctor (Outcome ε n gc) where
   map_const := rfl
   id_map x := by cases x <;> simp [Functor.map]
   comp_map f h x := by cases x <;> simp [Functor.map]
-  -- TODO review 43 end
 
 instance : LawfulGradedFunctor (Success n) where
   gmap_id x := by cases x; rfl
@@ -66,25 +66,40 @@ theorem Success.seq_assoc {gc' gc'' : Necessity} (a : Success n gc α)
 @[simp] theorem Success.seq_restText {gc' : Necessity} (a : Success n gc α)
     (b : Success a.restSize gc' β) : (a.seq b).restText = b.restText := rfl
 
-theorem Outcome.heq_inl {g₁ g₂ : Grade} (hc : g₁.consumes = g₂.consumes)
+theorem Outcome.heq_failure {c₁ c₂ : Necessity} (hc : c₁ = c₂)
     {f₁ f₂ : Failure n ε} (hf : f₁ = f₂)
-    : HEq (Sum.inl f₁ : Outcome ε n g₁ α) (Sum.inl f₂ : Outcome ε n g₂ α) := by
+    : HEq (failure f₁ : Outcome ε n c₁ α) (failure f₂ : Outcome ε n c₂ α) := by
   subst hf; exact hc ▸ HEq.rfl
 
-theorem Outcome.heq_inr {g₁ g₂ : Grade} (hc : g₁.consumes = g₂.consumes)
-    {s₁ : Success n g₁.consumes α} {s₂ : Success n g₂.consumes α} (hs : HEq s₁ s₂)
-    : HEq (Sum.inr s₁ : Outcome ε n g₁ α) (Sum.inr s₂ : Outcome ε n g₂ α) := by
-  obtain ⟨e₁, c₁⟩ := g₁; obtain ⟨e₂, c₂⟩ := g₂; dsimp only at hc hs; subst hc
-  cases eq_of_heq hs; rfl
+theorem Outcome.heq_success {c₁ c₂ : Necessity} (hc : c₁ = c₂)
+    {s₁ : Success n c₁ α} {s₂ : Success n c₂ α} (hs : HEq s₁ s₂)
+    : HEq (success s₁ : Outcome ε n c₁ α) (success s₂ : Outcome ε n c₂ α) := by
+  subst hc; cases eq_of_heq hs; rfl
+
+theorem bind_run {g g' : Grade} (m : Parser ε g α) (f : α → Parser ε g' β) (t : Text n)
+    : (bind m f).run t
+      = match m.run t with
+        | failure e => failure e
+        | success x => match f x.result |>.run x.restText with
+          | failure e => failure (e.trans x.le)
+          | success y => success (x.seq y) := by
+  cases hm : m.run t with
+  | failure e =>
+    simp only [bind, Parser.handle]; simp only [hm]
+    simp only [Outcome.handle, Outcome.throwFailure]
+  | success x =>
+    simp only [bind, Parser.handle]; simp only [hm]
+    simp only [Outcome.handle, Success.bindParser]
+    cases (f x.result).run x.restText <;> rfl
 
 theorem parser_gpure_gbind {j : Grade} (a : α) (f : α → Parser ε j β)
     : (gpure a >>=ᵍ f) ≍ f a := by
   apply Parser.heq (one_mul j)
   intro m t
-  simp only [gbind, gpure, bind, Outcome.ofSuccess]
+  simp only [gbind, gpure, bind_run, Outcome.ofSuccess]
   cases (f a).run t with
-  | inl e => simp
-  | inr y => cases y; simp [Success.seq]
+  | failure e => simp
+  | success y => cases y; simp [Success.seq]
 
 theorem parser_gbind_gpure {i : Grade} (p : Parser ε i α)
     : (p >>=ᵍ gpure) ≍ p := by
@@ -92,10 +107,10 @@ theorem parser_gbind_gpure {i : Grade} (p : Parser ε i α)
   apply Parser.heq (mul_one i)
   intro m t
   obtain ⟨pr, ps⟩ := p
-  simp only [gbind, gpure, bind, Outcome.ofSuccess]
-  cases pr t with
-  | inl e => dsimp only; exact Outcome.heq_inl hc rfl
-  | inr x => dsimp only; exact Outcome.heq_inr hc (Success.heq hc rfl rfl HEq.rfl)
+  simp only [gbind, gpure, bind_run, Outcome.ofSuccess]
+  exact match pr t with
+  | failure e => Outcome.heq_failure hc rfl
+  | success x => Outcome.heq_success hc (Success.heq hc rfl rfl HEq.rfl)
 
 theorem parser_gbind_assoc {i j k : Grade}
     (x : Parser ε i α) (f : α → Parser ε j β) (g : β → Parser ε k γ)
@@ -104,18 +119,18 @@ theorem parser_gbind_assoc {i j k : Grade}
   apply Parser.heq (mul_assoc i j k)
   intro m t
   obtain ⟨xr, xs⟩ := x
-  simp only [gbind, bind]
+  simp only [gbind, bind_run]
   cases xr t with
-  | inl e => dsimp only; exact Outcome.heq_inl hc rfl
-  | inr a =>
+  | failure e => exact Outcome.heq_failure hc rfl
+  | success a =>
     dsimp only
     cases (f a.result).run a.restText with
-    | inl e => dsimp only; exact Outcome.heq_inl hc rfl
-    | inr b =>
-      dsimp only; simp only [Success.seq_result, Success.seq_restText]
+    | failure e => exact Outcome.heq_failure hc rfl
+    | success b =>
+      simp only [Success.seq_result, Success.seq_restText]
       cases (g b.result).run b.restText with
-      | inl e => exact Outcome.heq_inl hc (by cases e; rfl)
-      | inr c => exact Outcome.heq_inr hc (Success.seq_assoc a b c)
+      | failure e => exact Outcome.heq_failure hc (by cases e; rfl)
+      | success c => exact Outcome.heq_success hc (Success.seq_assoc a b c)
 
 theorem parser_gmap_gpure (G : α → β) (x : α)
     : (G <$>ᵍ (gpure x : Parser ε 1 α)) = gpure (G x) := by
@@ -127,10 +142,10 @@ theorem parser_gpure_gseq {i : Grade} (G : α → β) (x : Parser ε i α)
   apply Parser.heq (one_mul i)
   intro m t
   obtain ⟨xr, xs⟩ := x
-  simp only [GradedApplicative.gseq, GradedFunctor.gmap, gpure, bind, Outcome.ofSuccess, Functor.map]
+  simp only [GradedApplicative.gseq, GradedFunctor.gmap, gpure, bind_run, Outcome.ofSuccess, Functor.map]
   cases xr t with
-  | inl e => dsimp only; exact Outcome.heq_inl hc rfl
-  | inr y => dsimp only; exact Outcome.heq_inr hc (Success.heq hc rfl rfl HEq.rfl)
+  | failure e => exact Outcome.heq_failure hc rfl
+  | success y => exact Outcome.heq_success hc (Success.heq hc rfl rfl HEq.rfl)
 
 theorem parser_gseq_gpure {i : Grade} (u : Parser ε i (α → β)) (x : α)
     : (u <*>ᵍ fun () => gpure x) ≍ ((· x) <$>ᵍ u) := by
@@ -138,10 +153,10 @@ theorem parser_gseq_gpure {i : Grade} (u : Parser ε i (α → β)) (x : α)
   apply Parser.heq (mul_one i)
   intro m t
   obtain ⟨ur, us⟩ := u
-  simp only [GradedApplicative.gseq, GradedFunctor.gmap, gpure, bind, Outcome.ofSuccess, Functor.map]
+  simp only [GradedApplicative.gseq, GradedFunctor.gmap, gpure, bind_run, Outcome.ofSuccess, Functor.map]
   cases ur t with
-  | inl e => dsimp only; exact Outcome.heq_inl hc rfl
-  | inr y => dsimp only; exact Outcome.heq_inr hc (Success.heq hc rfl rfl HEq.rfl)
+  | failure e => exact Outcome.heq_failure hc rfl
+  | success y => exact Outcome.heq_success hc (Success.heq hc rfl rfl HEq.rfl)
 
 theorem parser_gseq_assoc {i j k : Grade}
     (u : Parser ε i (β → γ)) (v : Parser ε j (α → β)) (w : Parser ε k α)
@@ -151,18 +166,18 @@ theorem parser_gseq_assoc {i j k : Grade}
   apply Parser.heq (mul_assoc i j k)
   intro m t
   obtain ⟨ur, us⟩ := u
-  simp only [GradedApplicative.gseq, GradedFunctor.gmap, bind, Functor.map]
+  simp only [GradedApplicative.gseq, GradedFunctor.gmap, bind_run, Functor.map]
   cases ur t with
-  | inl e => dsimp only; exact Outcome.heq_inl hc rfl
-  | inr a =>
+  | failure e => exact Outcome.heq_failure hc rfl
+  | success a =>
     dsimp only
     cases (v.run a.restText) with
-    | inl e => dsimp only; exact Outcome.heq_inl hc rfl
-    | inr b =>
-      dsimp only; simp only [Success.seq_result, Success.seq_restText]
+    | failure e => exact Outcome.heq_failure hc rfl
+    | success b =>
+      simp only [Success.seq_result, Success.seq_restText]
       cases (w.run b.restText) with
-      | inl e => exact Outcome.heq_inl hc (by cases e; rfl)
-      | inr c => exact Outcome.heq_inr hc (Success.heq (sup_assoc _ _ _) rfl rfl HEq.rfl)
+      | failure e => exact Outcome.heq_failure hc (by cases e; rfl)
+      | success c => exact Outcome.heq_success hc (Success.heq (sup_assoc _ _ _) rfl rfl HEq.rfl)
   -- TODO review 44 end
 
 -- TODO review 45 (deletion here)
@@ -182,6 +197,3 @@ instance : LawfulGradedMonad (Parser ε) where
   -- TODO review 47 end
 
 end Parser
--- TODO review 48 begin
-
--- TODO review 48 end

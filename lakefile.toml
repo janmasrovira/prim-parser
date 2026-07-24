@@ -1,6 +1,6 @@
 name = "prim-parser"
 version = "0.1.0"
-defaultTargets = ["PrimParser"]
+defaultTargets = ["PrimParser", "Examples"]
 
 [leanOptions]
 pp.unicode.fun = true
