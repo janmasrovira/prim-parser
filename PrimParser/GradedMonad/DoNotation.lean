@@ -66,9 +66,13 @@ where
         pure ⟨elem.getArgs.back!⟩
   expandDoMatch (node : Syntax) : MacroM (TSyntax `term) := do
     let processed ← replaceDoSeqs node
-    return ⟨match processed with
-      | .node info _ args => .node info ``Lean.Parser.Term.match args
-      | other => other⟩
+    let args := processed.getArgs
+    let some withIdx := args.findIdx? (· matches .atom _ "with")
+      | Macro.throwErrorAt node "malformed match in gdo block"
+    let discrs := args[withIdx - 1]!
+    let alts := args[withIdx + 1]!
+    return ⟨.node (SourceInfo.none) ``Lean.Parser.Term.match
+      #[args[0]!, mkNullNode, mkNullNode, discrs, args[withIdx]!, alts]⟩
   replaceDoSeqs (node : Syntax) : MacroM Syntax := do
     if node.getKind == ``Lean.Parser.Term.doSeqIndent ||
        node.getKind == `Lean.Parser.Term.doSeqBrack then

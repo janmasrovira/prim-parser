@@ -79,11 +79,18 @@ theorem Success.seq_assoc
   (a : Success n gc α)
   (b : Success a.restSize gc' β)
   : (a.seq b).result = b.result := rfl
+
 @[simp] theorem Success.seq_restText
   {gc' : Necessity}
   (a : Success n gc α)
   (b : Success a.restSize gc' β)
   : (a.seq b).restText = b.restText := rfl
+
+@[simp] theorem Success.seq_restSize
+  {gc' : Necessity}
+  (a : Success n gc α)
+  (b : Success a.restSize gc' β)
+  : (a.seq b).restSize = b.restSize := rfl
 
 theorem Outcome.failure_congr
   {f : Failure n ε}
@@ -127,8 +134,8 @@ theorem gpure_gbind
   intro m t
   simp only [gbind, gpure, bind_run]
   cases f a |>.run t with
-  | failure e => simp
-  | success y => cases y; simp [Success.seq]
+  | failure e => rfl
+  | success y => cases y; rfl
 
 theorem gbind_gpure {i : Grade} (p : Parser ε i α) : (p >>=ᵍ gpure) ≍ p := by
   have hc := congrArg Grade.consumes (mul_one i)
@@ -158,7 +165,7 @@ theorem gbind_assoc
     cases f a.result |>.run a.restText with
     | failure e => exact Outcome.failure_congr hc
     | success b =>
-      simp only [Success.seq_result, Success.seq_restText]
+      simp [Success.seq_result, Success.seq_restText]
       cases g b.result |>.run b.restText with
       | failure e => exact Outcome.failure_congr hc
       | success c => exact Outcome.success_congr hc Success.seq_assoc
@@ -216,7 +223,7 @@ theorem gseq_assoc
     cases v.run a.restText with
     | failure e => exact Outcome.failure_congr hc
     | success b =>
-      simp only [Success.seq_result, Success.seq_restText]
+      simp
       cases w.run b.restText with
       | failure e => exact Outcome.failure_congr hc
       | success c => exact Outcome.success_congr hc Success.seq_assoc

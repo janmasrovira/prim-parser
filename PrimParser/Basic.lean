@@ -120,12 +120,13 @@ theorem consumptionWitness.le : consumptionWitness n m a → n ≤ m := by
 
 theorem consumptionWitness.inf_of_possibly_le {x : Necessity} (h : possibly ≤ x)
     (w : consumptionWitness n m gc) : consumptionWitness n m (x ⊓ gc) := by
-  cases x <;> cases gc <;> first | contradiction | omega
+  cases x <;> cases gc <;> first | contradiction | (simp_all <;> omega)
 
 theorem consumptionWitness.trans {n1 n2 n3 : Nat}
   (w1 : consumptionWitness n2 n1 gc)
   (w2 : consumptionWitness n3 n2 gc')
-  : consumptionWitness n3 n1 (gc ⊔ gc') := by cases gc <;> cases gc' <;> omega
+  : consumptionWitness n3 n1 (gc ⊔ gc') := by
+  cases gc <;> cases gc' <;> simp_all <;> omega
 
 /-- A successful parse result -/
 structure Success (n : Nat) (consumes : Necessity) (α : Type) where
@@ -217,12 +218,12 @@ instance : Functor (Outcome ε n gc) where
 
 theorem Outcome.map_sound (f : α → β) (o : Outcome ε n gc α) (ho : Sound ge o)
   : Sound ge (f <$> o) := by
-  cases o <;> simpa using ho
+  cases o <;> exact ho
 
 def Error.eof : Error := "eof"
 def Error.fail : Error := "fail"
 
-def Success.le (p : Success n gc α) : p.restSize ≤ n := consumptionWitness.le p.witness
+theorem Success.le (p : Success n gc α) : p.restSize ≤ n := consumptionWitness.le p.witness
 
 def Success.weakenConsumes (p : Success n gc α) : Success n possibly α :=
   { p with witness := p.le }
@@ -233,7 +234,7 @@ def Success.trans (s : Success m gc α) (h : m ≤ n) : Success n (gc ⊔ possib
   restText := s.restText
   witness := by
     have w := s.witness
-    cases gc <;> omega
+    cases gc <;> simp_all <;> omega
 
 def Success.seq
   (r1 : Success n gc α)
