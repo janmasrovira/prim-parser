@@ -3,12 +3,12 @@ import Mathlib.Algebra.Group.Defs
 /-!
 # Graded Monads
 
-Type classes for functors, applicatives, monads, and alternatives indexed by a
-monoidal grade. Composition multiplies grades via the monoid operation.
+Type classes for functors, applicatives, and monads indexed by a grade. The raw
+versions require only `Mul` and `One`; the `Lawful*` classes require a `Monoid`.
 -/
 
 variable
-  {G : Type} [Monoid G]
+  {G : Type}
 
 /-- A type family indexed by a grade and a type. -/
 abbrev GradedType G := G → Type → Type
@@ -18,23 +18,17 @@ class GradedFunctor (f : GradedType G) : Type 1 where
   gmap {i α β} (h : α → β) : f i α → f i β
 
 /-- Graded applicative. -/
-class GradedApplicative (f : GradedType G) extends GradedFunctor f where
+class GradedApplicative [One G] [Mul G] (f : GradedType G) extends GradedFunctor f where
   gpure {α} : α → f 1 α
   gseq {i j α β} : f i (α → β) → (Unit → f j α) → f (i * j) β
 
 /-- Graded monad. -/
-class GradedMonad (m : GradedType G) extends GradedApplicative m where
+class GradedMonad [One G] [Mul G] (m : GradedType G) extends GradedApplicative m where
   gbind {i j α β} : m i α → (α → m j β) → m (i * j) β
-
-/-- Graded alternative. -/
-class GradedAlternative [AddSemigroup G] [Zero G] (f : GradedType G) extends GradedApplicative f where
-  gempty {α} : f 0 α
-  gchoice {α} {i j} : f i α → f j α → f (i + j) α
 
 export GradedFunctor (gmap)
 export GradedApplicative (gpure gseq)
 export GradedMonad (gbind)
-export GradedAlternative (gempty gchoice)
 
 /-- Cast the grade of a graded type -/
 def gcast {f : GradedType G} {i j : G} {α} (h : i = j) (x : f i α) : f j α := h ▸ x
@@ -47,16 +41,15 @@ infixr:100 " <$>ᵍ " => gmap
 infixr:100 " <$ᵍ "  => gconst
 infixl:60  " <*>ᵍ " => gseq
 infixl:55  " >>=ᵍ " => gbind
-infixl:30  " <|>ᵍ " => gchoice
 
-class LawfulGradedFunctor (f : GradedType G) [GradedFunctor f] : Prop where
+class LawfulGradedFunctor [Monoid G] (f : GradedType G) [GradedFunctor f] : Prop where
   gmap_id {i α} (x : f i α)
     : id <$>ᵍ x = x
 
   gmap_comp {i α β γ} (g : β → γ) (h : α → β) (x : f i α)
     : (g ∘ h) <$>ᵍ x = g <$>ᵍ (h <$>ᵍ x)
 
-class LawfulGradedApplicative (f : GradedType G) [GradedApplicative f] : Prop extends LawfulGradedFunctor f where
+class LawfulGradedApplicative [Monoid G] (f : GradedType G) [GradedApplicative f] : Prop extends LawfulGradedFunctor f where
   gmap_gpure {α β} (g : α → β) (x : α)
     : g <$>ᵍ (gpure x : f 1 α) = gpure (g x)
 
@@ -70,7 +63,7 @@ class LawfulGradedApplicative (f : GradedType G) [GradedApplicative f] : Prop ex
     : ((Function.comp <$>ᵍ u <*>ᵍ fun () => v) <*>ᵍ fun () => w)
      ≍ (u <*>ᵍ fun () => (v <*>ᵍ fun () => w))
 
-class LawfulGradedMonad (m : GradedType G) [GradedMonad m] : Prop extends LawfulGradedApplicative m where
+class LawfulGradedMonad [Monoid G] (m : GradedType G) [GradedMonad m] : Prop extends LawfulGradedApplicative m where
   gpure_gbind {j α β} (x : α) (f : α → m j β)
     : (gpure x >>=ᵍ f) ≍ f x
 
@@ -79,17 +72,3 @@ class LawfulGradedMonad (m : GradedType G) [GradedMonad m] : Prop extends Lawful
 
   gbind_assoc {i j k α β γ} (x : m i α) (f : α → m j β) (g : β → m k γ)
     : (x >>=ᵍ f >>=ᵍ g) ≍ (x >>=ᵍ fun a => f a >>=ᵍ g)
-
-class LawfulGradedAlternative [AddMonoid G] (f : GradedType G) [GradedAlternative f] : Prop extends LawfulGradedApplicative f where
-  gempty_gchoice {i α} (x : f i α)
-    : (gempty <|>ᵍ x) ≍ x
-
-  gchoice_gempty {i α} (x : f i α)
-    : (x <|>ᵍ gempty) ≍ x
-
-  gchoice_assoc {i j k α} (x : f i α) (y : f j α) (z : f k α)
-    : ((x <|>ᵍ y) <|>ᵍ z) ≍ (x <|>ᵍ (y <|>ᵍ z))
-
-class LawfulGradedMonadPlus [AddMonoid G] (m : GradedType G) [GradedAlternative m] [GradedMonad m] : Prop extends LawfulGradedAlternative m where
-  gempty_gbind {α β i} {x : α → m i β} : gempty >>=ᵍ x ≍ (gempty : m 0 β)
-  gbind_gempty {α β i} {x : m i α} : x >>=ᵍ (fun _ => (gempty : m 0 β)) ≍ (gempty : m 0 β)
