@@ -11,10 +11,19 @@ behavior at the type level via `Necessity`.
 
 abbrev Error := String
 
-/-- Input text of statically known length `n`. -/
-abbrev Text (n : Nat) := List.Vector Char n
+structure Text (n : Nat) where
+  bytes : ByteArray
+  pos : Nat
+  sound : bytes.size - pos = n
+  bounds : pos ≤ bytes.size
 
-def Text.empty : Text 0 := ⟨[], rfl⟩
+def Text.ofString (s : String) : Text s.toUTF8.size where
+  bytes := s.toUTF8
+  pos := 0
+  sound := by simp
+  bounds := by simp
+
+def Text.empty : Text 0 := { bytes := .empty, pos := 0, sound := by simp, bounds := by simp }
 
 /-- A parser's static grade: whether it may/must produce errors and
 whether it may/must consume input. -/
@@ -485,17 +494,40 @@ def runOption (p : Parser ε ⟨ge, gc⟩ α) (t : Text n) : Option (Success n g
 def runResult? (p : Parser ε ⟨ge, gc⟩ α) (t : Text n) : Option α :=
   (p.runOption t).map (·.result)
 
-/-- Consume and return a single character, or fail on empty input. -/
+/-- Consume a single byte. -/
+def anyByte : Parser Error conditional UInt8 where
+  run {n} t :=
+    if h : t.pos < t.bytes.size then
+      success {result := t.bytes[t.pos]'h
+               restText := {
+                 bytes := t.bytes
+                 pos := t.pos + 1
+                 sound := rfl
+                 bounds := h
+               }
+               witness := by have := t.sound; omega}
+    else
+      failure {error := Error.eof, restText := t, witness := by simp}
+  sound t := by simp
+
+/-- Consume a single UTF-8 character. -/
 def anyChar : Parser Error conditional Char where
   run {n} t :=
-    match n, t with
-    | 0, .nil => failure { error := Error.eof, restText := .nil, witness := by simp }
-    | Nat.succ n, ⟨c :: cs, p⟩ =>
-      success {
-        result := c,
-        restSize := n,
-        restText := ⟨cs, by simpa [List.length_cons] using p⟩,
-        witness := by simp }
+    match h : t.bytes.utf8DecodeChar? t.pos with
+    | some c =>
+      have hle := ByteArray.le_size_of_utf8DecodeChar?_eq_some h
+      success {result := c
+               restText := {
+                 bytes := t.bytes
+                 pos := t.pos + c.utf8Size
+                 sound := rfl
+                 bounds := hle
+               }
+               witness := by
+                 have := t.sound
+                 have := Char.utf8Size_pos c
+                 omega}
+    | none => failure {error := Error.eof, restText := t, witness := by simp}
   sound t := by simp
 
 /-- Like `gpure` but with a flexible grade: both `ge` and `gc` can be `never`

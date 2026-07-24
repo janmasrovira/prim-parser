@@ -2,11 +2,16 @@ import PrimParser
 
 open Parser
 
-def toText (s : String) : Text s.toList.length := ⟨s.toList, rfl⟩
+def toText (s : String) : Text s.toUTF8.size := Text.ofString s
 
--- anyChar
 #guard anyChar.runResult? (toText "abc") == some 'a'
 #guard anyChar.runResult? (toText "") == none
+#guard anyChar.runResult? (toText "é") == some 'é'
+#guard anyChar.runResult? (toText "😀") == some '😀'
+
+#guard anyByte.runResult? (toText "é") == some 0xC3
+#guard anyByte.runResult? (toText "A") == some 0x41
+#guard anyByte.runResult? (toText "") == none
 
 -- char
 #guard (char 'a').runResult? (toText "abc") == some ()

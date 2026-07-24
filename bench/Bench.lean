@@ -11,7 +11,7 @@ import Examples.Csv
 open Parser
 
 /-- Build a length-indexed `Text` from a `String`. -/
-def toText (s : String) : Text s.toList.length := ⟨s.toList, rfl⟩
+def toText (s : String) : Text s.toUTF8.size := Text.ofString s
 
 /-- `[0, 1, 2, ..., n-1]` as JSON. -/
 def genJson (n : Nat) : String :=
