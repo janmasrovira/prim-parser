@@ -272,7 +272,7 @@ def bind
   (f : α → Parser ε g' β)
   : Parser ε (g * g') β :=
   m.handle
-    (onSuccess := fun _t _h x => x.bindParser f)
+    (onSuccess := fun _ _ x => x.bindParser f)
     (soundSuccess := fun h x => by
       have hsound := f x.result |>.sound x.restText
       cases hrun : f x.result |>.run x.restText with
