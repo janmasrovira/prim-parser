@@ -109,11 +109,9 @@ abbrev ite (sel a b : Necessity) : Necessity := (a ⊓ b) ⊔ sel ⊓ a ⊔ sel.
 @[simp] theorem ite_idem : b.ite a a = a := by
   cases a <;> simp
 
--- TODO review 41 begin
 theorem compl_le {c : Necessity} : possibly ≤ c → c.complement ≤ possibly := by
   cases c <;> decide
 theorem le_compl {c : Necessity} : c ≤ possibly → possibly ≤ c.complement := by
   cases c <;> decide
 
--- TODO review 41 end
 end Necessity
