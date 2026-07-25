@@ -1,4 +1,4 @@
-import PrimParser.Base
+import Mathlib.Data.Vector.Basic
 import PrimParser.GradedMonad.Basic
 import PrimParser.GradedMonad.DoNotation
 

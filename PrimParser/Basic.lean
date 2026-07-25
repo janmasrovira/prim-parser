@@ -1,4 +1,4 @@
-import PrimParser.Base
+import PrimParser.NonEmptyList
 import PrimParser.Necessity
 import PrimParser.GradedMonad
 
