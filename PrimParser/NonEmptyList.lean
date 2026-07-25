@@ -1,6 +1,3 @@
-import Mathlib.Data.Vector.Basic
-import Mathlib.Order.Fin.Basic
-
 variable {α : Type}
 
 abbrev NonEmptyList α := { l : List α // l ≠ [] }

@@ -1,4 +1,5 @@
-import PrimParser.Base
+import Mathlib.Algebra.Group.Defs
+import Mathlib.Order.Fin.Basic
 
 /-- Three-valued modality tracking whether a property holds always, possibly, or never. -/
 inductive Necessity where
