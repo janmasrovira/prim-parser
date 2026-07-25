@@ -62,7 +62,6 @@ theorem Success.heq
   (hc : c1 = c2)
   (hr : s1.result = s2.result := by rfl)
   (hrs : s1.restSize = s2.restSize := by rfl)
-  (hrt : s1.restText ≍ s2.restText := by rfl)
   : s1 ≍ s2 := by
   subst hc; apply heq_of_eq; cases s1; cases s2; simp_all
 
@@ -79,12 +78,6 @@ theorem Success.seq_assoc
   (a : Success n gc α)
   (b : Success a.restSize gc' β)
   : (a.seq b).result = b.result := rfl
-
-@[simp] theorem Success.seq_restText
-  {gc' : Necessity}
-  (a : Success n gc α)
-  (b : Success a.restSize gc' β)
-  : (a.seq b).restText = b.restText := rfl
 
 @[simp] theorem Success.seq_restSize
   {gc' : Necessity}
@@ -113,7 +106,7 @@ theorem bind_run
   : (bind m f).run t
       = match m.run t with
         | failure e => failure e
-        | success x => match f x.result |>.run x.restText with
+        | success x => match f x.result |>.run (t.dropTo x.restSize x.le) with
           | failure e => failure (e.trans x.le)
           | success y => success (x.seq y) := by
   cases hm : m.run t with
@@ -123,7 +116,7 @@ theorem bind_run
   | success x =>
     simp only [bind, Parser.handle, hm]
     simp only [Outcome.handle, Success.bindParser]
-    cases f x.result |>.run x.restText <;> rfl
+    cases f x.result |>.run (t.dropTo x.restSize x.le) <;> rfl
 
 theorem gpure_gbind
   {j : Grade}
@@ -132,7 +125,7 @@ theorem gpure_gbind
   : (gpure a >>=ᵍ f) ≍ f a := by
   apply Parser.heq (one_mul j)
   intro m t
-  simp only [gbind, gpure, bind_run]
+  simp only [gbind, gpure, bind_run, Text.dropTo_self]
   cases f a |>.run t with
   | failure e => rfl
   | success y => cases y; rfl
@@ -162,11 +155,11 @@ theorem gbind_assoc
   | failure e => exact Outcome.failure_congr hc
   | success a =>
     dsimp only
-    cases f a.result |>.run a.restText with
+    cases f a.result |>.run (t.dropTo a.restSize a.le) with
     | failure e => exact Outcome.failure_congr hc
     | success b =>
-      simp [Success.seq_result, Success.seq_restText]
-      cases g b.result |>.run b.restText with
+      simp only [Success.seq_result, Success.seq_restSize, Text.dropTo_trans]
+      cases g b.result |>.run (t.dropTo b.restSize (b.le.trans a.le)) with
       | failure e => exact Outcome.failure_congr hc
       | success c => exact Outcome.success_congr hc Success.seq_assoc
 
@@ -185,7 +178,8 @@ theorem gpure_gseq
   apply Parser.heq (one_mul i)
   intro m t
   obtain ⟨xr, xs⟩ := x
-  simp only [GradedApplicative.gseq, GradedFunctor.gmap, gpure, bind_run, Functor.map]
+  simp only [GradedApplicative.gseq, GradedFunctor.gmap, gpure, bind_run, Functor.map,
+             Text.dropTo_self]
   exact match xr t with
   | failure e => Outcome.failure_congr hc
   | success y => Outcome.success_congr hc (Success.heq hc)
@@ -220,11 +214,11 @@ theorem gseq_assoc
   | failure e => exact Outcome.failure_congr hc
   | success a =>
     dsimp only
-    cases v.run a.restText with
+    cases v.run (t.dropTo a.restSize a.le) with
     | failure e => exact Outcome.failure_congr hc
     | success b =>
       simp
-      cases w.run b.restText with
+      cases w.run (t.dropTo b.restSize (b.le.trans a.le)) with
       | failure e => exact Outcome.failure_congr hc
       | success c => exact Outcome.success_congr hc Success.seq_assoc
 
