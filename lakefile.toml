@@ -25,4 +25,4 @@ root = "Bench"
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.28.0"
+rev = "v4.32.0"
