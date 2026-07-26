@@ -1,4 +1,5 @@
 import PrimParser.NonEmptyList
+import PrimParser.Text
 import PrimParser.Necessity
 import PrimParser.GradedMonad
 
@@ -11,44 +12,6 @@ behavior at the type level via `Necessity`.
 
 abbrev Error := String
 
-/-- Input to a parser. `n` is the number of bytes that haven't been consumed yet. -/
-structure Text (n : Nat) where
-  bytes : ByteArray
-  valid : n ≤ bytes.size
-
-@[inline] def Text.pos {n : Nat} (t : Text n) : Nat := t.bytes.size - n
-
-theorem Text.pos_lt {n : Nat} (t : Text (n + 1)) : t.pos < t.bytes.size := by
-  have := t.valid; simp only [Text.pos]; omega
-
-@[inline] def Text.head {n : Nat} (t : Text (n + 1)) : UInt8 :=
-  have := t.pos_lt
-  t.bytes[t.pos]
-
-theorem Text.utf8Size_le
-  {n : Nat} {c : Char}
-  (t : Text n)
-  (h : t.bytes.utf8DecodeChar? t.pos = some c)
-  : c.utf8Size ≤ n := by
-  have hle := ByteArray.le_size_of_utf8DecodeChar?_eq_some h
-  have hv := t.valid
-  simp only [Text.pos] at hle
-  omega
-
-def Text.ofString (s : String) : Text s.toUTF8.size where
-  bytes := s.toUTF8
-  valid := by simp
-
-def Text.empty : Text 0 := { bytes := .empty, valid := by simp }
-
-@[inline] def Text.dropTo {n : Nat} (t : Text n) (m : Nat) (h : m ≤ n) : Text m where
-  bytes := t.bytes
-  valid := h.trans t.valid
-
-@[simp] theorem Text.dropTo_self {n : Nat} (t : Text n) (h : n ≤ n) : t.dropTo n h = t := rfl
-
-@[simp] theorem Text.dropTo_trans {n m k : Nat} (t : Text n) (h : m ≤ n) (h' : k ≤ m)
-  : (t.dropTo m h).dropTo k h' = t.dropTo k (h'.trans h) := rfl
 
 /-- A parser's static grade: whether it may/must produce errors and
 whether it may/must consume input. -/
