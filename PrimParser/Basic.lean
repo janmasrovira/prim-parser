@@ -25,6 +25,16 @@ theorem Text.pos_lt {n : Nat} (t : Text (n + 1)) : t.pos < t.bytes.size := by
   have := t.pos_lt
   t.bytes[t.pos]
 
+theorem Text.utf8Size_le
+  {n : Nat} {c : Char}
+  (t : Text n)
+  (h : t.bytes.utf8DecodeChar? t.pos = some c)
+  : c.utf8Size ≤ n := by
+  have hle := ByteArray.le_size_of_utf8DecodeChar?_eq_some h
+  have hv := t.valid
+  simp only [Text.pos] at hle
+  omega
+
 def Text.ofString (s : String) : Text s.toUTF8.size where
   bytes := s.toUTF8
   valid := by simp
@@ -37,11 +47,7 @@ def Text.empty : Text 0 := { bytes := .empty, valid := by simp }
 
 @[simp] theorem Text.dropTo_self {n : Nat} (t : Text n) (h : n ≤ n) : t.dropTo n h = t := rfl
 
-@[simp] theorem Text.dropTo_trans
-  {n m k : Nat}
-  (t : Text n)
-  (h : m ≤ n)
-  (h' : k ≤ m)
+@[simp] theorem Text.dropTo_trans {n m k : Nat} (t : Text n) (h : m ≤ n) (h' : k ≤ m)
   : (t.dropTo m h).dropTo k h' = t.dropTo k (h'.trans h) := rfl
 
 /-- A parser's static grade: whether it may/must produce errors and
@@ -524,14 +530,9 @@ def anyChar : Parser Error conditional Char where
   run {n} t :=
     match h : t.bytes.utf8DecodeChar? t.pos with
     | some c =>
-      have hle := ByteArray.le_size_of_utf8DecodeChar?_eq_some h
-      success {result := c
-               restSize := n - c.utf8Size
-               witness := by
-                 have := t.valid
-                 have := Char.utf8Size_pos c
-                 simp only [Text.pos] at hle
-                 omega}
+      have hle := t.utf8Size_le h
+      have hpos := Char.utf8Size_pos c
+      success {result := c, restSize := n - c.utf8Size, witness := by omega}
     | none => failure {error := Error.eof, restSize := n}
   sound t := by simp
 
