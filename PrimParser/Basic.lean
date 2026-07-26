@@ -609,9 +609,9 @@ def many (p : Parser ε ⟨ge, always⟩ α) : Parser ε flexible (List α) wher
   run :=
     let rec go {n} (t : Text n)
         : Success n possibly (List α) :=
-      match p.runOption t with
-      | .none => {result := [], restSize := n}
-      | .some r =>
+      match p.run t with
+      | .failure _ => {result := [], restSize := n}
+      | .success r =>
         have : r.restSize < n := r.witness
         let rest := go (t.dropTo r.restSize r.le)
         {result := r.result :: rest.result
