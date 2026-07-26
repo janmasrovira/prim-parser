@@ -11,37 +11,38 @@ behavior at the type level via `Necessity`.
 
 abbrev Error := String
 
+/-- Input to a parser. `n` is the number of bytes that haven't been consumed yet. -/
 structure Text (n : Nat) where
   bytes : ByteArray
-  pos : Nat
-  sound : bytes.size - pos = n
-  bounds : pos ≤ bytes.size
+  valid : n ≤ bytes.size
+
+@[inline] def Text.pos {n : Nat} (t : Text n) : Nat := t.bytes.size - n
+
+theorem Text.pos_lt {n : Nat} (t : Text (n + 1)) : t.pos < t.bytes.size := by
+  have := t.valid; simp only [Text.pos]; omega
+
+@[inline] def Text.head {n : Nat} (t : Text (n + 1)) : UInt8 :=
+  have := t.pos_lt
+  t.bytes[t.pos]
 
 def Text.ofString (s : String) : Text s.toUTF8.size where
   bytes := s.toUTF8
-  pos := 0
-  sound := by simp
-  bounds := by simp
+  valid := by simp
 
-def Text.empty : Text 0 := { bytes := .empty, pos := 0, sound := by simp, bounds := by simp }
+def Text.empty : Text 0 := { bytes := .empty, valid := by simp }
 
-/-- Advance past `n - m` bytes, leaving a text of size `m`. -/
 @[inline] def Text.dropTo {n : Nat} (t : Text n) (m : Nat) (h : m ≤ n) : Text m where
   bytes := t.bytes
-  pos := t.pos + (n - m)
-  sound := by have := t.sound; have := t.bounds; omega
-  bounds := by have := t.sound; have := t.bounds; omega
+  valid := h.trans t.valid
 
-@[simp] theorem Text.dropTo_self {n : Nat} (t : Text n) (h : n ≤ n) : t.dropTo n h = t := by
-  simp [dropTo]
+@[simp] theorem Text.dropTo_self {n : Nat} (t : Text n) (h : n ≤ n) : t.dropTo n h = t := rfl
 
 @[simp] theorem Text.dropTo_trans
   {n m k : Nat}
   (t : Text n)
   (h : m ≤ n)
   (h' : k ≤ m)
-  : (t.dropTo m h).dropTo k h' = t.dropTo k (h'.trans h) := by
-  simp [dropTo]; omega
+  : (t.dropTo m h).dropTo k h' = t.dropTo k (h'.trans h) := rfl
 
 /-- A parser's static grade: whether it may/must produce errors and
 whether it may/must consume input. -/
@@ -146,8 +147,7 @@ theorem consumptionWitness.trans {n1 n2 n3 : Nat}
   : consumptionWitness n3 n1 (gc ⊔ gc') := by
   cases gc <;> cases gc' <;> simp_all <;> omega
 
-/-- A successful parse result. The remaining input is identified by its size
-alone; the text itself is recovered from the input via `Text.dropTo`. -/
+/-- A successful parse result. -/
 structure Success (n : Nat) (consumes : Necessity) (α : Type) where
   result : α
   restSize : Nat
@@ -514,13 +514,9 @@ def runResult? (p : Parser ε ⟨ge, gc⟩ α) (t : Text n) : Option α :=
 
 /-- Consume a single byte. -/
 def anyByte : Parser Error conditional UInt8 where
-  run {n} t :=
-    if h : t.pos < t.bytes.size then
-      success {result := t.bytes[t.pos]'h
-               restSize := n - 1
-               witness := by have := t.sound; omega}
-    else
-      failure {error := Error.eof, restSize := n}
+  run {n} t := match n, t with
+    | 0, _ => failure {error := Error.eof, restSize := 0}
+    | m + 1, t => success {result := t.head, restSize := m}
   sound t := by simp
 
 /-- Consume a single UTF-8 character. -/
@@ -532,8 +528,9 @@ def anyChar : Parser Error conditional Char where
       success {result := c
                restSize := n - c.utf8Size
                witness := by
-                 have := t.sound
+                 have := t.valid
                  have := Char.utf8Size_pos c
+                 simp only [Text.pos] at hle
                  omega}
     | none => failure {error := Error.eof, restSize := n}
   sound t := by simp
