@@ -3,3 +3,4 @@ import PrimParser.GradedMonad
 import PrimParser.Necessity
 import PrimParser.NonEmptyList
 import PrimParser.Properties
+import PrimParser.Text
