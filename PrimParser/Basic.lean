@@ -316,18 +316,17 @@ private def fixGo [Inhabited ε]
     (f : Parser ε ⟨ge, always⟩ α → Parser ε ⟨ge, always⟩ α)
     (t : Text n)
     : {o : Outcome ε n always α // Outcome.Sound ge o} :=
-  match n, t with
-  | 0, _ => ⟨Outcome.throw default, Outcome.throw_sound h⟩
-  | m + 1, t =>
-    let self : Parser ε ⟨ge, always⟩ α :=
-      { run := fun {k} t' =>
-          if hk : k ≤ m then fixGo h f t' |>.val
-          else Outcome.throw default
-        sound := fun {k} t' => by
-          split
-          · exact fixGo h f t' |>.property
-          · exact Outcome.throw_sound h }
-    ⟨f self |>.run t, f self |>.sound t⟩
+  let self : Parser ε ⟨ge, always⟩ α :=
+    { run := fun {k} t' =>
+        if hk : k < n then fixGo h f t' |>.val
+        else Outcome.throw default
+      sound := fun {k} t' => by
+        split
+        · exact fixGo h f t' |>.property
+        · exact Outcome.throw_sound h }
+  { val := f self |>.run t, property := f self |>.sound t }
+  termination_by n
+  decreasing_by all_goals omega
 
 /-- Build a recursive parser via a fixpoint. Termination is guaranteed by
 requiring the body to always consume input. -/
