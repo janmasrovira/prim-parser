@@ -3,17 +3,17 @@ import Tests.Basic
 
 open Parser Balanced
 
-#guard group.runResult? (toText "()") == some ()
-#guard group.runResult? (toText "(())") == some ()
-#guard group.runResult? (toText "(()())") == some ()
-#guard group.runResult? (toText "((()))") == some ()
+#guard group.runOption "()" == some ()
+#guard group.runOption "(())" == some ()
+#guard group.runOption "(()())" == some ()
+#guard group.runOption "((()))" == some ()
 
-#guard group.runResult? (toText "") == none
-#guard group.runResult? (toText "(") == none
-#guard group.runResult? (toText "(()") == none
-#guard group.runResult? (toText ")(") == none
+#guard group.runOption "" == none
+#guard group.runOption "(" == none
+#guard group.runOption "(()" == none
+#guard group.runOption ")(" == none
 
-#guard balanced.runResult? (toText "") == some ()
-#guard balanced.runResult? (toText "()") == some ()
-#guard balanced.runResult? (toText "()()") == some ()
-#guard balanced.runResult? (toText "(())()") == some ()
+#guard balanced.runOption "" == some ()
+#guard balanced.runOption "()" == some ()
+#guard balanced.runOption "()()" == some ()
+#guard balanced.runOption "(())()" == some ()

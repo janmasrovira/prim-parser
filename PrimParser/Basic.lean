@@ -473,13 +473,15 @@ def weakenErrors (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨possibly, gc⟩ 
 def weaken (p : Parser ε ⟨ge, gc⟩ α) : Parser ε fallible α :=
   p.weakenErrors.weakenConsumes
 
-/-- Run a parser, discarding the error and returning the `Success` as an `Option`. -/
-def runOption (p : Parser ε ⟨ge, gc⟩ α) (t : Text n) : Option (Success n gc α) :=
-  p.run t |>.handle (p.sound t) (fun _ r => .some r) (fun _ _ => .none)
+/-- Run a parser on a `String`. -/
+def runParser (p : Parser ε ⟨ge, gc⟩ α) (s : String) : Outcome ε s.toUTF8.size gc α :=
+  p.run (Text.ofString s)
 
-/-- Run a parser, returning only the parsed value as an `Option`. -/
-def runResult? (p : Parser ε ⟨ge, gc⟩ α) (t : Text n) : Option α :=
-  (p.runOption t).map (·.result)
+theorem runParser_sound (p : Parser ε ⟨ge, gc⟩ α) (s : String) : Outcome.Sound ge (p.runParser s) := p.sound _
+
+/-- Run a parser on a `String`, discarding the error and returning the value as an `Option`. -/
+def runOption (p : Parser ε ⟨ge, gc⟩ α) (s : String) : Option α :=
+  (p.runParser s).handle (p.runParser_sound s) (fun _ r => .some r.result) (fun _ _ => .none)
 
 /-- Consume a single byte. -/
 def anyByte : Parser Error conditional UInt8 where

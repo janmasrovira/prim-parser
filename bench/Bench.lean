@@ -35,23 +35,25 @@ def loop (iters : Nat) (body : Unit → Nat) : Nat :=
 def benchJson (size iters : Nat) : Nat :=
   let t := toText (genJson size)
   loop iters fun _ =>
-    match Json.json.runResult? t with
-    | some (.arr xs) => xs.length
-    | _ => 0
+    match Json.json.run t with
+    | Parser.success r => match r.result with
+      | .arr xs => xs.length
+      | _ => 0
+    | Parser.failure _ => 0
 
 def benchArith (size iters : Nat) : Nat :=
   let t := toText (genArith size)
   loop iters fun _ =>
-    match Expr.expr.runResult? t with
-    | some e => (Expr.eval e).toNat
-    | none => 0
+    match Expr.expr.run t with
+    | Parser.success r => (Expr.eval r.result).toNat
+    | Parser.failure _ => 0
 
 def benchCsv (size iters : Nat) : Nat :=
   let t := toText (genCsv size)
   loop iters fun _ =>
-    match Csv.table.runResult? t with
-    | some ⟨n, _⟩ => n
-    | none => 0
+    match Csv.table.run t with
+    | Parser.success r => r.result.fst
+    | Parser.failure _ => 0
 
 def main (args : List String) : IO Unit := do
   let workload := args[0]?.getD "json"
