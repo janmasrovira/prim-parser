@@ -178,6 +178,19 @@ variable
   | failure f => onError sound f
   | success r => onSuccess sound r
 
+theorem Outcome.handle_prop
+  {P : β → Prop}
+  {o : Outcome ε n gc α}
+  (sound : Sound ge o)
+  {onSuccess : ge ≤ possibly → Success n gc α → β}
+  {onError : possibly ≤ ge → Failure n ε → β}
+  (hSuccess : ∀ h r, P (onSuccess h r))
+  (hError : ∀ h f, P (onError h f))
+  : P (o.handle sound onSuccess onError) :=
+  match o with
+  | failure f => hError sound f
+  | success r => hSuccess sound r
+
 theorem Outcome.handle_sound
   {o : Outcome ε n gc α}
   (sound : Sound ge o)
@@ -186,9 +199,7 @@ theorem Outcome.handle_sound
   (soundSuccess : ∀ h r, Sound ge' (onSuccess h r))
   (soundError : ∀ h f, Sound ge' (onError h f))
   : Sound ge' (o.handle sound onSuccess onError) :=
-  match o with
-  | failure f => soundError sound f
-  | success r => soundSuccess sound r
+  handle_prop sound soundSuccess soundError
 
 instance : Functor (Success n gc) where
   map f x := {x with result := f x.result}
@@ -474,14 +485,22 @@ def weaken (p : Parser ε ⟨ge, gc⟩ α) : Parser ε fallible α :=
   p.weakenErrors.weakenConsumes
 
 /-- Run a parser on a `String`. -/
-def runParser (p : Parser ε ⟨ge, gc⟩ α) (s : String) : Outcome ε s.toUTF8.size gc α :=
-  p.run (Text.ofString s)
+def runParser (p : Parser ε g α) (s : String) : Except ε α :=
+  let t := Text.ofString s
+  (p.run t).handle (p.sound t) (fun _ r => .ok r.result) (fun _ f => .error f.error)
 
-theorem runParser_sound (p : Parser ε ⟨ge, gc⟩ α) (s : String) : Outcome.Sound ge (p.runParser s) := p.sound _
+abbrev Except.Sound (errors : Necessity) {α : Type} (r : Except ε α) : Prop :=
+  match r with
+  | .error _ => possibly ≤ errors
+  | .ok _ => errors ≤ possibly
+
+theorem runParser_sound (p : Parser ε g α) (s : String)
+  : Except.Sound g.errors (p.runParser s) :=
+  Outcome.handle_prop (p.sound _) (fun h _ => h) (fun h _ => h)
 
 /-- Run a parser on a `String`, discarding the error and returning the value as an `Option`. -/
 def runOption (p : Parser ε ⟨ge, gc⟩ α) (s : String) : Option α :=
-  (p.runParser s).handle (p.runParser_sound s) (fun _ r => .some r.result) (fun _ _ => .none)
+  (p.runParser s).toOption
 
 /-- Consume a single byte. -/
 def anyByte : Parser Error conditional UInt8 where
