@@ -12,6 +12,9 @@ behavior at the type level via `Necessity`.
 
 abbrev Error := String
 
+class ParserError (ε : Type) where
+  /-- Unexpected end of input. -/
+  endOfInput : ε
 
 /-- A parser's static grade: whether it may/must produce errors and
 whether it may/must consume input. -/
@@ -216,8 +219,11 @@ theorem Outcome.map_sound (f : α → β) (o : Outcome ε n gc α) (ho : Sound g
   : Sound ge (f <$> o) := by
   cases o <;> exact ho
 
-def Error.eof : Error := "eof"
+def Error.eof : Error := "unexpected end of input"
 def Error.fail : Error := "fail"
+
+instance : ParserError Error where
+  endOfInput := Error.eof
 
 theorem Success.le (p : Success n gc α) : p.restSize ≤ n := consumptionWitness.le p.witness
 
@@ -309,8 +315,7 @@ instance : GradedApplicative (Parser ε) where
 instance : GradedMonad (Parser ε) where
   gbind := bind
 
--- `Inhabited ε` is needed to throw a `default` error on empty input
-private def fixGo [Inhabited ε]
+private def fixGo [ParserError ε]
     {n : Nat}
     (h : possibly ≤ ge)
     (f : Parser ε ⟨ge, always⟩ α → Parser ε ⟨ge, always⟩ α)
@@ -319,7 +324,7 @@ private def fixGo [Inhabited ε]
   let self : Parser ε ⟨ge, always⟩ α :=
     { run := fun {k} t' =>
         if hk : k < n then fixGo h f t' |>.val
-        else Outcome.throw default
+        else Outcome.throw ParserError.endOfInput
       sound := fun {k} t' => by
         split
         · exact fixGo h f t' |>.property
@@ -330,7 +335,7 @@ private def fixGo [Inhabited ε]
 
 /-- Build a recursive parser via a fixpoint. Termination is guaranteed by
 requiring the body to always consume input. -/
-def fix [Inhabited ε]
+def fix [ParserError ε]
   (f : Parser ε ⟨ge, always⟩ α → Parser ε ⟨ge, always⟩ α)
   (h : possibly ≤ ge := by simp)
   : Parser ε ⟨ge, always⟩ α :=
@@ -573,7 +578,7 @@ def test (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement ⊓
   Option.isSome <$>ᵍ optional p
 
 /-- Repeatedly apply `p` until `e` succeeds, collecting the results of `p`. -/
-def manyTill [Inhabited ε]
+def manyTill [ParserError ε]
   (p : Parser ε ⟨ge, always⟩ α)
   (e : Parser ε ⟨ge', always⟩ β)
   : Parser ε ⟨ge, always⟩ (List α) :=
@@ -903,7 +908,7 @@ def skipManyN (n : Nat) (p : Parser ε ⟨ge, always⟩ α)
   grade_by by simp
 
 /-- Run `p` until `stop` succeeds; discard `p`'s results. -/
-def skipUntil [Inhabited ε]
+def skipUntil [ParserError ε]
   (stop : Parser ε ⟨ge', always⟩ β)
   (p : Parser ε ⟨ge, always⟩ α)
   : Parser ε ⟨ge, always⟩ PUnit :=
