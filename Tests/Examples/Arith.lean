@@ -4,7 +4,7 @@ import Tests.Basic
 open Parser Expr
 
 private def eval? (s : String) : Option Int :=
-  (expr.runResult? (toText s)).map Expr.eval
+  (expr.runOption s).map Expr.eval
 
 -- literals
 #guard eval? "42" == some 42
