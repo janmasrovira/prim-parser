@@ -316,20 +316,22 @@ instance : GradedMonad (Parser ε) where
   gbind := bind
 
 private def fixGo [ParserError ε]
-    {n : Nat}
-    (h : possibly ≤ ge)
-    (f : Parser ε ⟨ge, always⟩ α → Parser ε ⟨ge, always⟩ α)
-    (t : Text n)
-    : {o : Outcome ε n always α // Outcome.Sound ge o} :=
+  {n : Nat}
+  (h : possibly ≤ ge)
+  (f : Parser ε ⟨ge, always⟩ α → Parser ε ⟨ge, always⟩ α)
+  (t : Text n)
+  : {o : Outcome ε n always α // Outcome.Sound ge o} :=
   let self : Parser ε ⟨ge, always⟩ α :=
-    { run := fun {k} t' =>
-        if hk : k < n then fixGo h f t' |>.val
+    { run {k} t' :=
+        if hk : k < n
+        then fixGo h f t' |>.val
         else Outcome.throw ParserError.endOfInput
       sound := fun {k} t' => by
         split
         · exact fixGo h f t' |>.property
         · exact Outcome.throw_sound h }
-  { val := f self |>.run t, property := f self |>.sound t }
+  { val := f self |>.run t
+    property := f self |>.sound t }
   termination_by n
   decreasing_by all_goals omega
 
