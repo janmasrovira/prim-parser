@@ -16,8 +16,8 @@ inductive Json where
 
 namespace Json
 
-private def keyword (s : String) : Parser Error conditional PUnit :=
-  lexeme (string s)
+private def keyword (s : String) (h : s ≠ "" := by decide) : Parser Error conditional PUnit :=
+  lexeme (string s h)
 
 private def jnull : Parser Error conditional Json :=
   .null <$ᵍ keyword "null"

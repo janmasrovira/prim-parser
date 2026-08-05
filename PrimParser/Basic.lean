@@ -102,8 +102,8 @@ abbrev consumptionWitness (n m : Nat) : Necessity → Prop
   | possibly => n ≤ m
   | never => n = m
 
-@[simp] theorem consumptionWitness.rfl : gc ≤ possibly → consumptionWitness n n gc := by
-  intro _; cases gc <;> try simp
+@[simp] theorem consumptionWitness.rfl (h : gc ≤ possibly) : consumptionWitness n n gc := by
+  cases gc <;> simp
   contradiction
 
 theorem consumptionWitness.le : consumptionWitness n m gc → n ≤ m := by
@@ -125,13 +125,15 @@ theorem consumptionWitness.trans {n1 n2 n3 : Nat}
 structure Success (n : Nat) (consumes : Necessity) (α : Type) where
   result : α
   restSize : Nat
-  witness : consumptionWitness restSize n consumes := by simp
+  witness : consumptionWitness restSize n consumes := by
+    first | omega | simp
 
 /-- A failed parse result -/
 structure Failure (n : Nat) (ε : Type) where
   error : ε
   restSize : Nat
-  witness : restSize ≤ n := by simp
+  witness : restSize ≤ n := by
+    first | omega | simp
 
 def Failure.trans (f : Failure m ε) (h : m ≤ n) : Failure n ε where
   error := f.error
@@ -153,7 +155,7 @@ abbrev Outcome.Sound (errors : Necessity) {c : Necessity} {α : Type} (o : Outco
   | failure _ => possibly ≤ errors
   | success _ => errors ≤ possibly
 
-@[simp] theorem Outcome.sound_possibly {α} (o : Outcome ε n gc α) : Sound possibly o := by
+@[simp] theorem Outcome.sound_possibly {α} {o : Outcome ε n gc α} : Sound possibly o := by
   cases o <;> simp [Outcome.Sound]
 
 end Parser
@@ -162,7 +164,12 @@ end Parser
 The grade tracks error and consumption behavior at the type level. -/
 structure Parser (ε : Type) (g : Grade) (α : Type) where
   run : ∀ {n}, Text n → Parser.Outcome ε n g.consumes α
-  sound : ∀ {n} (t : Text n), Parser.Outcome.Sound g.errors (run t)
+  sound : ∀ {n} (t : Text n), Parser.Outcome.Sound g.errors (run t) := by
+    intro _ _
+    first
+      | assumption
+      | exact Parser.Outcome.sound_possibly
+      | simp [Parser.Outcome.Sound]
 
 namespace Parser
 
@@ -172,6 +179,14 @@ variable
   {g g' : Grade}
   {ge ge' : Necessity} -- used for `errors`
   {gc gc' : Necessity} -- used for `consumes`
+
+@[ext] theorem ext
+  {p q : Parser ε g α}
+  (h : ∀ {m} (t : Text m), p.run t = q.run t)
+  : p = q := by
+  obtain ⟨pr, ps⟩ := p; obtain ⟨qr, qs⟩ := q
+  have hr : @pr = @qr := by funext m t; exact h t
+  subst hr; rfl
 
 @[inline] def Outcome.handle
   (o : Outcome ε n gc α)
@@ -206,6 +221,32 @@ theorem Outcome.handle_sound
   : Sound ge' (o.handle sound onSuccess onError) :=
   handle_prop sound soundSuccess soundError
 
+namespace Outcome
+
+variable
+  {o : Outcome ε n gc α}
+  {sound : Sound ge o}
+  {onSuccess : ge ≤ possibly → Success n gc α → β}
+  {onError : possibly ≤ ge → Failure n ε → β}
+
+/-- Reduce `handle` when the outcome is known to succeed. -/
+theorem handle_success
+  {r : Success n gc α}
+  (h : o = success r)
+  (hge : ge ≤ possibly := by simp)
+  : o.handle sound onSuccess onError = onSuccess hge r := by
+  subst h; rfl
+
+/-- Reduce `handle` when the outcome is known to fail. -/
+theorem handle_failure
+  {f : Failure n ε}
+  (h : o = failure f)
+  (hge : possibly ≤ ge := by simp)
+  : o.handle sound onSuccess onError = onError hge f := by
+  subst h; rfl
+
+end Outcome
+
 instance : Functor (Success n gc) where
   map f x := { x with result := f x.result }
 
@@ -239,7 +280,7 @@ def Success.trans (s : Success m gc α) (h : m ≤ n) : Success n (gc ⊔ possib
     have w := s.witness
     cases gc <;> simp_all <;> omega
 
-def Success.seq
+@[simp] def Success.seq
   (r1 : Success n gc α)
   (r2 : Success r1.restSize gc' β)
   : Success n (gc ⊔ gc') β where
@@ -247,7 +288,7 @@ def Success.seq
   restSize := r2.restSize
   witness := consumptionWitness.trans r1.witness r2.witness
 
-@[inline] def Success.bindParser {xc fe fc : Necessity}
+@[inline, simp] def Success.bindParser {xc fe fc : Necessity}
   (t : Text n)
   (x : Success n xc α)
   (f : α → Parser ε ⟨fe, fc⟩ β)
@@ -309,7 +350,6 @@ instance : IsEmpty (Parser ε impossible α) where
 /-- Lift a value into a parser that consumes nothing and never fails. -/
 abbrev pure (a : α) : Parser ε 1 α where
   run {n} _ := success { result := a, restSize := n, witness := rfl }
-  sound _ := by simp
 
 instance : GradedApplicative (Parser ε) where
   gpure := pure
@@ -319,6 +359,10 @@ instance : GradedApplicative (Parser ε) where
 
 instance : GradedMonad (Parser ε) where
   gbind := bind
+
+theorem gbind_run (m : Parser ε g α) (k : α → Parser ε g' β) (t : Text n)
+  : (m >>=ᵍ k).run t
+    = (m.run t).handle (m.sound t) (fun _ x => x.bindParser t k) (fun _ e => failure e) := rfl
 
 private def fixGo [ParserError ε]
   {n : Nat}
@@ -453,7 +497,6 @@ def oneOf (l : NonEmptyList (Parser ε g α)) : Parser ε g α :=
 /-- A parser that always fails with error `e`. -/
 def throw (e : ε) (c : possibly ≤ ge := by simp) : Parser ε ⟨ge, gc⟩ α where
   run _ := Outcome.throw e
-  sound _ := Outcome.throw_sound c
 
 def Success.relaxConsumes (p : Success n gc α) : Success n (gc ⊓ possibly) α :=
   match gc with
@@ -523,7 +566,6 @@ def anyByte : Parser Error conditional UInt8 where
   run {n} t := match n, t with
     | 0, _ => failure { error := Error.eof, restSize := 0 }
     | m + 1, t => success { result := t.head, restSize := m }
-  sound t := by simp
 
 /-- Consume a single UTF-8 character. -/
 def anyChar : Parser Error conditional Char where
@@ -532,16 +574,37 @@ def anyChar : Parser Error conditional Char where
     | some c =>
       have hle := t.utf8Size_le h
       have hpos := Char.utf8Size_pos c
-      success { result := c, restSize := n - c.utf8Size, witness := by omega }
+      success { result := c
+                restSize := n - c.utf8Size }
     | none => failure { error := Error.eof, restSize := n }
-  sound t := by simp
+
+section
+
+variable {c : Char} {t : Text n}
+
+theorem anyChar_run_some
+  (h : t.bytes.utf8DecodeChar? t.pos = some c := by assumption)
+  (w : consumptionWitness (n - c.utf8Size) n always := by assumption)
+  : anyChar.run t
+    = success { result := c
+                restSize := n - c.utf8Size } := by
+  simp only [anyChar]; split <;> simp_all
+
+theorem anyChar_run_eof
+  (h : t.bytes.utf8DecodeChar? t.pos = none := by
+    first | assumption | exact Text.utf8DecodeChar?_eq_none)
+  : anyChar.run t
+    = failure { error := Error.eof
+                restSize := n } := by
+  simp only [anyChar]; split <;> simp_all
+
+end
 
 /-- Like `gpure` but with a flexible grade: both `ge` and `gc` can be `never`
 or `possibly`. Useful in match branches where all cases must share the same grade. -/
 def ok (a : α) (he : ge ≤ possibly := by simp) (hc : gc ≤ possibly := by simp)
   : Parser ε ⟨ge, gc⟩ α where
   run {n} _ := success { result := a, restSize := n, witness := consumptionWitness.rfl hc }
-  sound _ := he
 
 /-- Consume a character and apply `f`; succeed with the result or fail if `f` returns `none`. -/
 def token (f : Char → Option α) : Parser Error conditional α := gdo
@@ -554,6 +617,45 @@ def token (f : Char → Option α) : Parser Error conditional α := gdo
 def satisfy (f : Char → Bool) : Parser Error conditional Char :=
   token (fun c => if f c then .some c else .none)
 
+section
+
+variable {f : Char → Bool} {c : Char} {t : Text n}
+
+theorem satisfy_run_accept
+  (h : t.bytes.utf8DecodeChar? t.pos = some c := by assumption)
+  (cond : f c = true := by assumption)
+  (w : consumptionWitness (n - c.utf8Size) n always := by omega)
+  : (satisfy f).run t
+    = success { result := c
+                restSize := n - c.utf8Size } := by
+  rw [satisfy, token, gbind_run, Outcome.handle_success anyChar_run_some]
+  simp [ok, cond]
+
+theorem satisfy_run_reject
+  (h : t.bytes.utf8DecodeChar? t.pos = some c := by assumption)
+  (hf : ¬ f c := by assumption)
+  : (satisfy f).run t
+    = failure { error := Error.fail
+                restSize := n - c.utf8Size } := by
+  have : consumptionWitness (n - c.utf8Size) n always := by
+    have := t.utf8Size_le h
+    have := Char.utf8Size_pos c
+    omega
+  simp [satisfy, token, gbind_run]
+  rw [Outcome.handle_success anyChar_run_some]
+  simp [throw, Outcome.throw, hf, Failure.trans]
+
+theorem satisfy_run_eof
+  (h : t.bytes.utf8DecodeChar? t.pos = none := by
+    first | assumption | exact Text.utf8DecodeChar?_eq_none)
+  : (satisfy f).run t
+    = failure { error := Error.eof
+                restSize := n } := by
+  simp only [satisfy, token, gbind_run]
+  rw [Outcome.handle_failure anyChar_run_eof]
+
+end
+
 /-- Like `satisfy` but returns `PUnit`. -/
 def skipSatisfy (f : Char → Bool) : Parser Error conditional PUnit :=
   () <$ᵍ satisfy f
@@ -562,15 +664,16 @@ def skipSatisfy (f : Char → Bool) : Parser Error conditional PUnit :=
 def char (c : Char) : Parser Error conditional PUnit :=
   skipSatisfy (· == c)
 
-/-- Match an exact string. -/
-def string (str : String) : Parser Error conditional PUnit :=
-  let rec go : List Char → Parser Error conditional PUnit
-    | [] => throw Error.fail
-    | [c] => skipSatisfy (· == c)
-    | c :: cs => gdo
+/-- Match an exact non-empty string -/
+def string (str : String) (h : str ≠ "" := by decide) : Parser Error conditional PUnit :=
+  let rec go (c : Char) : List Char → Parser Error conditional PUnit
+    | [] => skipSatisfy (· == c)
+    | c' :: cs => gdo
       skipSatisfy (· == c)
-      go cs
-  go str.toList
+      go c' cs
+  match s : str.toList with
+  | [] => by simp_all
+  | c :: cs => go c cs
 
 /-- Try `p`; return `some result` on success or `none` on failure, never failing itself. -/
 def optional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ (Option α) where
@@ -583,7 +686,6 @@ def optional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement
       { result := .some r.result
         restSize := r.restSize
         witness := consumptionWitness.inf_of_possibly_le (Necessity.le_compl hs) r.witness }
-  sound t := by simp only [Outcome.Sound]; decide
 
 /-- Try `p`; return the result on success or the default value `d` on failure. -/
 def optionalD (p : Parser ε ⟨ge, gc⟩ α) (d : α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ α :=
@@ -621,7 +723,6 @@ def many (p : Parser ε ⟨ge, always⟩ α) : Parser ε flexible (List α) wher
           restSize := rest.restSize
           witness := by have := rest.witness; omega }
     fun t => success (go t)
-  sound t := by simp [Outcome.Sound]
 
 /-- Apply `p` one or more times, collecting results. -/
 def many1 (p : Parser ε ⟨ge, always⟩ α) : Parser ε ⟨ge, always⟩ (NonEmptyList α) := gdo
@@ -642,17 +743,186 @@ def skipMany1 (p : Parser ε ⟨ge, always⟩ α) : Parser ε ⟨ge, always⟩ P
 def takeWhile (f : Char → Bool) : Parser Error flexible String :=
   String.ofList <$>ᵍ many (satisfy f)
 
+@[specialize] private def takeWhileImpl (f : Char → Bool) : Parser Error flexible String where
+  run {n} t :=
+    let s := t.takeWhile f
+    success { result := s
+              restSize := n - s.utf8ByteSize }
+
 /-- Consume one or more characters while `f` holds. -/
 def takeWhile1 (f : Char → Bool) : Parser Error conditional String :=
   (String.ofList ∘ NonEmptyList.toList) <$>ᵍ many1 (satisfy f)
+
+@[specialize] private def takeWhile1Impl (f : Char → Bool) : Parser Error conditional String where
+  run {n} t := match n, t with
+    | 0, _ =>
+      failure { error := Error.eof
+                restSize := 0 }
+    | n + 1, t =>
+      let s := t.takeWhile f
+      if _h : 0 < s.utf8ByteSize then
+        success { result := s
+                  restSize := n + 1 - s.utf8ByteSize }
+      else
+        match hd : t.bytes.utf8DecodeChar? t.pos with
+        | some c =>
+          failure { error := Error.fail
+                    restSize := n + 1 - c.utf8Size }
+        | none =>
+          failure { error := Error.eof
+                    restSize := n + 1 }
 
 /-- Skip characters while `f` holds. -/
 def skipWhile (f : Char → Bool) : Parser Error flexible PUnit :=
   () <$ᵍ takeWhile f
 
+@[specialize] private def skipWhileImpl (f : Char → Bool) : Parser Error flexible PUnit where
+  run t :=
+    let r := t.skipWhile f
+    success { result := ()
+              restSize := r.val }
+
 /-- Skip one or more characters while `f` holds. -/
 def skipWhile1 (f : Char → Bool) : Parser Error conditional PUnit :=
   () <$ᵍ takeWhile1 f
+
+@[specialize] private def skipWhile1Impl (f : Char → Bool) : Parser Error conditional PUnit where
+  run {n} t := match n, t with
+    | 0, _ =>
+      failure { error := Error.eof
+                restSize := 0 }
+    | n + 1, t =>
+      let r := t.skipWhile f
+      if _h : r.val < n + 1 then
+        success { result := ()
+                  restSize := r.val }
+      else
+        match hd : t.bytes.utf8DecodeChar? t.pos with
+        | some c =>
+          failure { error := Error.fail
+                    restSize := n + 1 - c.utf8Size }
+        | none =>
+          failure { error := Error.eof
+                    restSize := n + 1 }
+
+theorem many_go_satisfy_restSize
+  (f : Char → Bool)
+  (t : Text n)
+  : (many.go (satisfy f) t).restSize = (Text.skipWhile f t).val := by
+  fun_induction Text.skipWhile f t <;> rw [many.go.eq_def]
+  case case1 => rw [satisfy_run_accept]; assumption
+  case case2 => simp_all [satisfy_run_reject]
+  case case3 => simp_all [satisfy_run_eof]
+
+private theorem takeWhile_go_eq (f : Char → Bool) (t : Text n) (acc : String)
+  : Text.takeWhile.go f t acc = acc ++ String.ofList (many.go (satisfy f) t).result := by
+  fun_induction Text.takeWhile.go f t acc <;> rw [many.go.eq_def]
+  case case1 =>
+    rw [satisfy_run_accept]
+    simp_all only [String.push_eq_append, String.append_assoc, String.ofList_cons]
+  case case2 => simp_all [satisfy_run_reject]
+  case case3 => simp_all [satisfy_run_eof]
+
+theorem many_go_satisfy_result (f : Char → Bool) (t : Text n)
+  : String.ofList (many.go (satisfy f) t).result = Text.takeWhile f t := by
+  simp only [Text.takeWhile, takeWhile_go_eq f t "", String.empty_append]
+
+@[csimp] private theorem takeWhile_eq_impl : @takeWhile = @takeWhileImpl := by
+  funext f
+  simp only [takeWhile, takeWhileImpl, many, GradedFunctor.gmap, Functor.map,
+             many_go_satisfy_result, many_go_satisfy_restSize, Text.val_skipWhile]
+
+@[csimp] private theorem skipWhile_eq_impl : @skipWhile = @skipWhileImpl := by
+  funext f
+  simp only [skipWhile, takeWhile, skipWhileImpl, many, GradedFunctor.gmap, Functor.map,
+             many_go_satisfy_restSize]
+  rfl
+
+private theorem many1_satisfy_eq (f : Char → Bool)
+  : many1 (satisfy f)
+    = (satisfy f >>=ᵍ fun c => many (satisfy f) >>=ᵍ fun cs => gpure (c ::₁ cs)) := rfl
+
+section
+
+variable {f : Char → Bool} {c : Char} {t : Text n}
+
+theorem takeWhile1_run_accept
+  (h : t.bytes.utf8DecodeChar? t.pos = some c := by assumption)
+  (hf : f c := by assumption)
+  : (takeWhile1 f).run t
+    = success { result := Text.takeWhile f t
+                restSize := (Text.skipWhile f t).val
+                witness := Text.skipWhile_lt_iff.mpr ⟨c, h, hf⟩ } := by
+  have := t.utf8Size_le h
+  have := Char.utf8Size_pos c
+  have hres : (many.go (satisfy f) t).result
+       = c :: (many.go (satisfy f) (t.advance c)).result := by
+    rw [many.go.eq_def, satisfy_run_accept]
+  have hrest : (many.go (satisfy f) t).restSize
+      = (many.go (satisfy f) (t.advance c)).restSize := by
+    rw [many.go.eq_def, satisfy_run_accept]
+  simp only [takeWhile1, GradedFunctor.gmap, many1_satisfy_eq, gbind_run]
+  rw [Outcome.handle_success satisfy_run_accept]
+  simp only [Success.bindParser, many, gbind_run, GradedApplicative.gpure, Outcome.handle,
+             Success.seq, Functor.map, Function.comp_apply, NonEmptyList.mk, NonEmptyList.toList,
+             ← hres, ← hrest, many_go_satisfy_result, many_go_satisfy_restSize]
+
+/-- `takeWhile1` fails exactly as the leading `satisfy` does. -/
+theorem takeWhile1_run_failure {fl : Failure n Error}
+  (hs : (satisfy f).run t = failure fl)
+  : (takeWhile1 f).run t = failure fl := by
+  simp only [takeWhile1, GradedFunctor.gmap, many1_satisfy_eq, gbind_run]
+  rw [Outcome.handle_failure hs]
+  rfl
+
+end
+
+@[csimp] private theorem takeWhile1_eq_impl : @takeWhile1 = @takeWhile1Impl := by
+  ext f n t
+  simp only [takeWhile1Impl, Text.utf8ByteSize_takeWhile_pos_iff]
+  repeat1' split
+  next => exact takeWhile1_run_failure satisfy_run_eof
+  next haccepts =>
+    obtain ⟨c, hd, hf⟩ := haccepts
+    simp only [takeWhile1_run_accept hd hf, Text.val_skipWhile]
+  next hrejects c hd =>
+    have : ¬ f c := fun hf => hrejects ⟨c, hd, hf⟩
+    exact takeWhile1_run_failure satisfy_run_reject
+  next => exact takeWhile1_run_failure satisfy_run_eof
+
+section
+
+variable {f : Char → Bool} {c : Char} {t : Text n}
+
+theorem skipWhile1_run_accept
+  (h : t.bytes.utf8DecodeChar? t.pos = some c)
+  (hf : f c)
+  : (skipWhile1 f).run t
+    = success { result := ()
+                restSize := (Text.skipWhile f t).val
+                witness := Text.skipWhile_lt_iff.mpr ⟨c, h, hf⟩ } := by
+  simp only [skipWhile1, gconst, GradedFunctor.gmap, Functor.map, takeWhile1_run_accept h hf]
+
+/-- `skipWhile1` fails exactly as `takeWhile1` does. -/
+theorem skipWhile1_run_failure {fl : Failure n Error}
+  (hs : (satisfy f).run t = failure fl)
+  : (skipWhile1 f).run t = failure fl := by
+  simp only [skipWhile1, gconst, GradedFunctor.gmap, Functor.map, takeWhile1_run_failure hs]
+
+end
+
+@[csimp] private theorem skipWhile1_eq_impl : @skipWhile1 = @skipWhile1Impl := by
+  ext f n t
+  simp only [skipWhile1Impl, Text.skipWhile_lt_iff]
+  repeat1' split
+  next => exact skipWhile1_run_failure satisfy_run_eof
+  next haccepts =>
+    obtain ⟨c, hd, hf⟩ := haccepts
+    exact skipWhile1_run_accept hd hf
+  next hrejects c hd =>
+    have : ¬ f c := fun hf => hrejects ⟨c, hd, hf⟩
+    exact skipWhile1_run_failure satisfy_run_reject
+  next => exact skipWhile1_run_failure satisfy_run_eof
 
 /-- Skip zero or more whitespace characters. -/
 def whitespace : Parser Error flexible PUnit :=
@@ -964,7 +1234,6 @@ def eof : Parser Error lookahead PUnit where
   run {n} t := match n with
     | .zero => ok () |>.run t
     | _ => throw Error.fail |>.run t
-  sound t := by simp
 
 /-- Run `p` without consuming input, keeping only the result. -/
 def lookahead (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge, never⟩ α :=

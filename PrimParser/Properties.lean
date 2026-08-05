@@ -15,14 +15,6 @@ variable
   {g g' : Grade}
   {ge gc c1 c2 : Necessity}
 
-@[ext] theorem ext
-  {p q : Parser ε g α}
-  (h : ∀ {m} (t : Text m), p.run t = q.run t)
-  : p = q := by
-  obtain ⟨pr, ps⟩ := p; obtain ⟨qr, qs⟩ := q
-  have hr : @pr = @qr := by funext m t; exact h t
-  subst hr; rfl
-
 instance : LawfulFunctor (Success n gc) where
   map_const := rfl
   id_map _ := rfl
