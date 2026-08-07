@@ -32,6 +32,15 @@ theorem utf8Size_le
   simp only [pos] at hle
   omega
 
+theorem sub_utf8Size_lt
+  {c : Char}
+  {t : Text n}
+  (h : t.nextChar = some c)
+  : n - c.utf8Size < n := by
+  have := utf8Size_le t h
+  have := Char.utf8Size_pos c
+  omega
+
 theorem nextChar_eq_none {t : Text 0} : t.nextChar = none := by
   cases h : t.nextChar with
   | none => rfl

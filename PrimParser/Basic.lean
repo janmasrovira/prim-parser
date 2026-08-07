@@ -584,11 +584,11 @@ variable {c : Char} {t : Text n}
 
 theorem anyChar_run_some
   (h : t.nextChar = some c := by assumption)
-  (w : consumptionWitness (n - c.utf8Size) n always := by assumption)
   : anyChar.run t
     = success { result := c
-                restSize := n - c.utf8Size } := by
-  simp only [anyChar]; split <;> simp_all
+                restSize := n - c.utf8Size
+                witness := Text.sub_utf8Size_lt h } := by
+  simp only [anyChar]; split <;> rw [h] at * <;> simp_all
 
 theorem anyChar_run_eof
   (h : t.nextChar = none := by
@@ -624,10 +624,10 @@ variable {f : Char → Bool} {c : Char} {t : Text n}
 theorem satisfy_run_accept
   (h : t.nextChar = some c := by assumption)
   (cond : f c = true := by assumption)
-  (w : consumptionWitness (n - c.utf8Size) n always := by omega)
   : (satisfy f).run t
     = success { result := c
-                restSize := n - c.utf8Size } := by
+                restSize := n - c.utf8Size
+                witness := Text.sub_utf8Size_lt h } := by
   rw [satisfy, token, gbind_run, Outcome.handle_success anyChar_run_some]
   simp [ok, cond]
 
