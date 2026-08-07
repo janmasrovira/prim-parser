@@ -32,6 +32,15 @@ theorem utf8Size_le
   simp only [pos] at hle
   omega
 
+theorem sub_utf8Size_lt
+  {c : Char}
+  {t : Text n}
+  (h : t.nextChar = some c)
+  : n - c.utf8Size < n := by
+  have := utf8Size_le t h
+  have := Char.utf8Size_pos c
+  omega
+
 theorem nextChar_eq_none {t : Text 0} : t.nextChar = none := by
   cases h : t.nextChar with
   | none => rfl
@@ -75,18 +84,18 @@ theorem skipWhile_accept
   (h : t.nextChar = some c := by assumption)
   (hf : f c := by assumption)
   : (skipWhile f t).val = (skipWhile f (t.advance c)).val := by
-  rw [skipWhile.eq_def]; split <;> simp_all; subst_vars; rfl
+  rw [skipWhile]; split <;> simp_all; subst_vars; rfl
 
 theorem skipWhile_reject
   (h : t.nextChar = some c := by assumption)
   (hf : ¬ f c := by assumption)
   : (skipWhile f t).val = n := by
-  rw [skipWhile.eq_def]; split <;> simp_all
+  rw [skipWhile]; split <;> simp_all
 
 theorem skipWhile_eof
   (h : t.nextChar = none := by assumption)
   : (skipWhile f t).val = n := by
-  rw [skipWhile.eq_def]; split <;> simp_all
+  rw [skipWhile]; split <;> simp_all
 
 end
 
@@ -112,18 +121,18 @@ theorem takeWhile_go_accept
   (h : t.nextChar = some c := by assumption)
   (hf : f c := by assumption)
   : takeWhile.go f t acc = takeWhile.go f (t.advance c) (acc.push c) := by
-  rw [takeWhile.go.eq_def]; split <;> simp_all; subst_vars; rfl
+  rw [takeWhile.go]; split <;> simp_all; subst_vars; rfl
 
 theorem takeWhile_go_reject
   (h : t.nextChar = some c := by assumption)
   (hf : ¬ f c := by assumption)
   : takeWhile.go f t acc = acc := by
-  rw [takeWhile.go.eq_def]; split <;> simp_all
+  rw [takeWhile.go]; split <;> simp_all
 
 theorem takeWhile_go_eof
   (h : t.nextChar = none := by assumption)
   : takeWhile.go f t acc = acc := by
-  rw [takeWhile.go.eq_def]; split <;> simp_all
+  rw [takeWhile.go]; split <;> simp_all
 
 theorem takeWhile_reject
   (h : t.nextChar = some c := by assumption)
