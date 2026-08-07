@@ -570,7 +570,7 @@ def anyByte : Parser Error conditional UInt8 where
 /-- Consume a single UTF-8 character. -/
 def anyChar : Parser Error conditional Char where
   run {n} t :=
-    match h : t.bytes.utf8DecodeChar? t.pos with
+    match h : t.nextChar with
     | some c =>
       have hle := t.utf8Size_le h
       have hpos := Char.utf8Size_pos c
@@ -583,7 +583,7 @@ section
 variable {c : Char} {t : Text n}
 
 theorem anyChar_run_some
-  (h : t.bytes.utf8DecodeChar? t.pos = some c := by assumption)
+  (h : t.nextChar = some c := by assumption)
   (w : consumptionWitness (n - c.utf8Size) n always := by assumption)
   : anyChar.run t
     = success { result := c
@@ -591,8 +591,8 @@ theorem anyChar_run_some
   simp only [anyChar]; split <;> simp_all
 
 theorem anyChar_run_eof
-  (h : t.bytes.utf8DecodeChar? t.pos = none := by
-    first | assumption | exact Text.utf8DecodeChar?_eq_none)
+  (h : t.nextChar = none := by
+    first | assumption | exact Text.nextChar_eq_none)
   : anyChar.run t
     = failure { error := Error.eof
                 restSize := n } := by
@@ -622,7 +622,7 @@ section
 variable {f : Char → Bool} {c : Char} {t : Text n}
 
 theorem satisfy_run_accept
-  (h : t.bytes.utf8DecodeChar? t.pos = some c := by assumption)
+  (h : t.nextChar = some c := by assumption)
   (cond : f c = true := by assumption)
   (w : consumptionWitness (n - c.utf8Size) n always := by omega)
   : (satisfy f).run t
@@ -632,7 +632,7 @@ theorem satisfy_run_accept
   simp [ok, cond]
 
 theorem satisfy_run_reject
-  (h : t.bytes.utf8DecodeChar? t.pos = some c := by assumption)
+  (h : t.nextChar = some c := by assumption)
   (hf : ¬ f c := by assumption)
   : (satisfy f).run t
     = failure { error := Error.fail
@@ -646,8 +646,8 @@ theorem satisfy_run_reject
   simp [throw, Outcome.throw, hf, Failure.trans]
 
 theorem satisfy_run_eof
-  (h : t.bytes.utf8DecodeChar? t.pos = none := by
-    first | assumption | exact Text.utf8DecodeChar?_eq_none)
+  (h : t.nextChar = none := by
+    first | assumption | exact Text.nextChar_eq_none)
   : (satisfy f).run t
     = failure { error := Error.eof
                 restSize := n } := by
@@ -764,7 +764,7 @@ def takeWhile1 (f : Char → Bool) : Parser Error conditional String :=
         success { result := s
                   restSize := n + 1 - s.utf8ByteSize }
       else
-        match hd : t.bytes.utf8DecodeChar? t.pos with
+        match hd : t.nextChar with
         | some c =>
           failure { error := Error.fail
                     restSize := n + 1 - c.utf8Size }
@@ -797,7 +797,7 @@ def skipWhile1 (f : Char → Bool) : Parser Error conditional PUnit :=
         success { result := ()
                   restSize := r.val }
       else
-        match hd : t.bytes.utf8DecodeChar? t.pos with
+        match hd : t.nextChar with
         | some c =>
           failure { error := Error.fail
                     restSize := n + 1 - c.utf8Size }
@@ -847,7 +847,7 @@ section
 variable {f : Char → Bool} {c : Char} {t : Text n}
 
 theorem takeWhile1_run_accept
-  (h : t.bytes.utf8DecodeChar? t.pos = some c := by assumption)
+  (h : t.nextChar = some c := by assumption)
   (hf : f c := by assumption)
   : (takeWhile1 f).run t
     = success { result := Text.takeWhile f t
@@ -895,7 +895,7 @@ section
 variable {f : Char → Bool} {c : Char} {t : Text n}
 
 theorem skipWhile1_run_accept
-  (h : t.bytes.utf8DecodeChar? t.pos = some c)
+  (h : t.nextChar = some c)
   (hf : f c)
   : (skipWhile1 f).run t
     = success { result := ()
