@@ -61,8 +61,11 @@ def empty : Text 0 := { bytes := .empty, valid := by simp }
 @[simp] theorem dropTo_trans (t : Text n) (h : m ≤ n) (h' : k ≤ m)
   : (t.dropTo m h).dropTo k h' = t.dropTo k (h'.trans h) := rfl
 
+/-- Move `k` bytes ahead -/
+abbrev drop (t : Text n) (k : Nat) : Text (n - k) := t.dropTo (n - k)
+
 /-- Move `c.utf8Size` ahead -/
-abbrev advance (t : Text n) (c : Char) : Text (n - c.utf8Size) := t.dropTo (n - c.utf8Size)
+abbrev advance (t : Text n) (c : Char) : Text (n - c.utf8Size) := t.drop c.utf8Size
 
 /-- Skip forward while `f` holds, returning the number of bytes left unconsumed. -/
 @[specialize] def skipWhile (f : Char → Bool) {n : Nat} (t : Text n) : {m : Nat // m ≤ n} :=
@@ -98,6 +101,54 @@ theorem skipWhile_eof
   rw [skipWhile]; split <;> simp_all
 
 end
+
+/-- The next `s.utf8ByteSize` bytes of `t` are exactly `s`. -/
+def HasPrefix (t : Text n) (s : String) : Prop :=
+  t.bytes.extract t.pos (t.pos + s.utf8ByteSize) = s.toByteArray
+
+/-- Do the bytes of `s` from `i` on match those of `t` at the same offset? -/
+def matchPrefix (s : String) (t : Text n) (h : s.utf8ByteSize ≤ n) (i : Nat) : Bool :=
+  if hi : i < s.utf8ByteSize then
+    have : t.pos + i < t.bytes.size := by have := t.valid; simp only [pos]; omega
+    t.bytes[t.pos + i] == s.getUTF8Byte ⟨i⟩ hi && matchPrefix s t h (i + 1)
+  else true
+termination_by s.utf8ByteSize - i
+
+theorem getElem_of_matchPrefix
+  {s : String} {t : Text n} {h : s.utf8ByteSize ≤ n} {i j : Nat}
+  (hm : matchPrefix s t h i)
+  (hij : i ≤ j)
+  (hj : j < s.utf8ByteSize)
+  (hb : t.pos + j < t.bytes.size)
+  : t.bytes[t.pos + j] = s.getUTF8Byte ⟨j⟩ hj := by
+  fun_induction matchPrefix s t h i with
+  | case1 i hi hlt ih =>
+    simp only [Bool.and_eq_true, beq_iff_eq] at hm
+    rcases Nat.eq_or_lt_of_le hij with rfl | hlt'
+    · exact hm.1
+    · exact ih hm.2 hlt'
+  | case2 i hi => omega
+
+theorem hasPrefix_of_matchPrefix
+  {s : String} {t : Text n} (h : s.utf8ByteSize ≤ n) (hm : matchPrefix s t h 0)
+  : t.HasPrefix s := by
+  have hv := t.valid
+  have hp : t.pos = t.bytes.size - n := rfl
+  have hs : s.toByteArray.size = s.utf8ByteSize := String.size_toByteArray
+  apply ByteArray.ext_getElem
+  · rw [ByteArray.size_extract]; omega
+  · intro i h1 h2
+    rw [ByteArray.getElem_extract, ByteArray.size_extract] at *
+    exact getElem_of_matchPrefix hm (Nat.zero_le i) (by omega) (by omega)
+
+/-- Consume `prefx` from the front of `t`, if it is there. -/
+def skipPrefix (prefx : String) (t : Text n)
+  : Option { t' : Text (n - prefx.utf8ByteSize) // t' = t.drop prefx.utf8ByteSize ∧ t.HasPrefix prefx } :=
+  if h : prefx.utf8ByteSize ≤ n then
+    if hm : matchPrefix prefx t h 0 then
+      some ⟨t.drop prefx.utf8ByteSize, rfl, hasPrefix_of_matchPrefix h hm⟩
+    else none
+  else none
 
 /-- Collect characters while `f` holds, returning them as a `String`. -/
 @[specialize] def takeWhile (f : Char → Bool) {n : Nat} (t : Text n) : String :=
