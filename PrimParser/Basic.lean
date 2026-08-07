@@ -809,14 +809,14 @@ theorem many_go_satisfy_restSize
   (f : Char → Bool)
   (t : Text n)
   : (many.go (satisfy f) t).restSize = (Text.skipWhile f t).val := by
-  fun_induction Text.skipWhile f t <;> rw [many.go.eq_def]
+  fun_induction Text.skipWhile f t <;> rw [many.go]
   case case1 => rw [satisfy_run_accept]; assumption
   case case2 => simp_all [satisfy_run_reject]
   case case3 => simp_all [satisfy_run_eof]
 
 private theorem takeWhile_go_eq (f : Char → Bool) (t : Text n) (acc : String)
   : Text.takeWhile.go f t acc = acc ++ String.ofList (many.go (satisfy f) t).result := by
-  fun_induction Text.takeWhile.go f t acc <;> rw [many.go.eq_def]
+  fun_induction Text.takeWhile.go f t acc <;> rw [many.go]
   case case1 =>
     rw [satisfy_run_accept]
     simp_all only [String.push_eq_append, String.append_assoc, String.ofList_cons]
@@ -857,10 +857,10 @@ theorem takeWhile1_run_accept
   have := Char.utf8Size_pos c
   have hres : (many.go (satisfy f) t).result
        = c :: (many.go (satisfy f) (t.advance c)).result := by
-    rw [many.go.eq_def, satisfy_run_accept]
+    rw [many.go, satisfy_run_accept]
   have hrest : (many.go (satisfy f) t).restSize
       = (many.go (satisfy f) (t.advance c)).restSize := by
-    rw [many.go.eq_def, satisfy_run_accept]
+    rw [many.go, satisfy_run_accept]
   simp only [takeWhile1, GradedFunctor.gmap, many1_satisfy_eq, gbind_run]
   rw [Outcome.handle_success satisfy_run_accept]
   simp only [Success.bindParser, many, gbind_run, GradedApplicative.gpure, Outcome.handle,
