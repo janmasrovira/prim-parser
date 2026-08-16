@@ -1,7 +1,7 @@
 import Examples.Arith
 import Tests.Basic
 
-open Parser Expr
+open Parser Parser.Char Expr
 
 private def eval? (s : String) : Option Int :=
   (expr.runOption s).map Expr.eval

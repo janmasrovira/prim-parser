@@ -1,7 +1,7 @@
 import Examples.Csv
 import Tests.Basic
 
-open Parser Csv
+open Parser Parser.Char Csv
 
 -- single field
 #guard row.runOption "hello" == some ["hello"]

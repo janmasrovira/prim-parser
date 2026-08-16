@@ -1,196 +1,203 @@
-import Mathlib.Order.Fin.Basic
+import PrimParser.Buffer
 
 /-! Length-indexed parser input. -/
 
-/-- Input to a parser. `n` is the number of bytes that haven't been consumed yet. -/
-structure Input (n : Nat) where
-  bytes : ByteArray
-  valid : n ≤ bytes.size
+open Buffer
+
+/-- Input to a parser. `n` is the number of units that haven't been consumed yet. -/
+structure Input (σ τ : Type) [Buffer σ τ] (n : Nat) where
+  buf : σ
+  valid : n ≤ size τ buf
 
 namespace Input
 
-variable {n m k : Nat}
+variable {σ τ : Type} [Buffer σ τ] {n m k : Nat}
 
-@[inline] def pos (t : Input n) : Nat := t.bytes.size - n
+abbrev nextTok (inp : Input σ τ n) : Option τ := Buffer.nextTok inp.buf n
 
-theorem pos_lt (t : Input (n + 1)) : t.pos < t.bytes.size := by
-  have := t.valid; simp only [pos]; omega
+theorem width_le
+  {t : τ}
+  (inp : Input σ τ n)
+  (h : inp.nextTok = some t)
+  : width σ t ≤ n :=
+  Buffer.nextTok_le h
 
-@[inline] def head (t : Input (n + 1)) : UInt8 :=
-  have := t.pos_lt
-  t.bytes[t.pos]
+theorem sub_width_lt
+  {t : τ}
+  {inp : Input σ τ n}
+  (h : inp.nextTok = some t)
+  : n - width σ t < n :=
+  Buffer.sub_width_lt h
 
-abbrev nextChar (t : Input n) : Option Char := t.bytes.utf8DecodeChar? t.pos
+@[simp] theorem nextTok_eq_none {inp : Input σ τ 0} : inp.nextTok = none :=
+  Buffer.nextTok_zero _
 
-theorem utf8Size_le
-  {c : Char}
-  (t : Input n)
-  (h : t.nextChar = some c)
-  : c.utf8Size ≤ n := by
-  have hle := ByteArray.le_size_of_utf8DecodeChar?_eq_some h
-  have hv := t.valid
-  simp only [pos] at hle
-  omega
+def empty : Input σ τ 0 where
+  buf := nil τ
+  valid := Nat.zero_le _
 
-theorem sub_utf8Size_lt
-  {c : Char}
-  {t : Input n}
-  (h : t.nextChar = some c)
-  : n - c.utf8Size < n := by
-  have := utf8Size_le t h
-  have := Char.utf8Size_pos c
-  omega
+@[inline] def dropTo (inp : Input σ τ n) (m : Nat) (h : m ≤ n := by omega) : Input σ τ m where
+  buf := inp.buf
+  valid := h.trans inp.valid
 
-theorem nextChar_eq_none {t : Input 0} : t.nextChar = none := by
-  cases h : t.nextChar with
-  | none => rfl
-  | some c => have := t.utf8Size_le h; have := Char.utf8Size_pos c; omega
+@[simp] theorem dropTo_self (inp : Input σ τ n) (h : n ≤ n) : inp.dropTo n h = inp := rfl
 
-def ofString (s : String) : Input s.toUTF8.size where
-  bytes := s.toUTF8
-  valid := by simp
+@[simp] theorem dropTo_trans (inp : Input σ τ n) (h : m ≤ n) (h' : k ≤ m)
+  : (inp.dropTo m h).dropTo k h' = inp.dropTo k (h'.trans h) := rfl
 
-def empty : Input 0 := { bytes := .empty, valid := by simp }
+/-- Move past one token. -/
+abbrev advance (inp : Input σ τ n) (t : τ) : Input σ τ (n - width σ t) :=
+  inp.dropTo (n - width σ t)
 
-@[inline] def dropTo (t : Input n) (m : Nat) (h : m ≤ n := by omega) : Input m where
-  bytes := t.bytes
-  valid := h.trans t.valid
-
-@[simp] theorem dropTo_self (t : Input n) (h : n ≤ n) : t.dropTo n h = t := rfl
-
-@[simp] theorem dropTo_trans (t : Input n) (h : m ≤ n) (h' : k ≤ m)
-  : (t.dropTo m h).dropTo k h' = t.dropTo k (h'.trans h) := rfl
-
-/-- Move `c.utf8Size` ahead -/
-abbrev advance (t : Input n) (c : Char) : Input (n - c.utf8Size) := t.dropTo (n - c.utf8Size)
-
-/-- Skip forward while `f` holds, returning the number of bytes left unconsumed. -/
-@[specialize] def skipWhile (f : Char → Bool) {n : Nat} (t : Input n) : {m : Nat // m ≤ n} :=
-  match h : t.nextChar with
-  | some c =>
-    if f c then
-      have := t.utf8Size_le h
-      have := Char.utf8Size_pos c
-      let r := skipWhile f (t.advance c)
+/-- Skip forward while `f` holds, returning the number of units left unconsumed. -/
+@[specialize] def skipWhile (f : τ → Bool) {n : Nat} (inp : Input σ τ n) : {m : Nat // m ≤ n} :=
+  match h : inp.nextTok with
+  | some t =>
+    if f t then
+      have := inp.width_le h
+      have := width_pos (σ := σ) t
+      let r := skipWhile f (inp.advance t)
       ⟨r.val, by have := r.property; omega⟩
     else ⟨n, by omega⟩
   | none => ⟨n, by omega⟩
+  termination_by n
 
 section
 
-variable {f : Char → Bool} {c : Char} {t : Input n}
+variable {f : τ → Bool} {t : τ} {inp : Input σ τ n}
 
 theorem skipWhile_accept
-  (h : t.nextChar = some c := by assumption)
-  (hf : f c := by assumption)
-  : (skipWhile f t).val = (skipWhile f (t.advance c)).val := by
+  (h : inp.nextTok = some t := by assumption)
+  (hf : f t := by assumption)
+  : (skipWhile f inp).val = (skipWhile f (inp.advance t)).val := by
   rw [skipWhile]; split <;> simp_all; subst_vars; rfl
 
 theorem skipWhile_reject
-  (h : t.nextChar = some c := by assumption)
-  (hf : ¬ f c := by assumption)
-  : (skipWhile f t).val = n := by
+  (h : inp.nextTok = some t := by assumption)
+  (hf : ¬ f t := by assumption)
+  : (skipWhile f inp).val = n := by
   rw [skipWhile]; split <;> simp_all
 
 theorem skipWhile_eof
-  (h : t.nextChar = none := by assumption)
-  : (skipWhile f t).val = n := by
+  (h : inp.nextTok = none := by assumption)
+  : (skipWhile f inp).val = n := by
   rw [skipWhile]; split <;> simp_all
 
 end
 
+/-- The scanners make progress exactly when the next token is accepted. -/
+theorem skipWhile_lt_iff {f : τ → Bool} {inp : Input σ τ n}
+  : (skipWhile f inp).val < n ↔ ∃ t, inp.nextTok = some t ∧ f t := by
+  fun_cases skipWhile f inp <;> simp_all; omega
+
+def ofArray {τ : Type} (a : Array τ) : Input (Array τ) τ a.size where
+  buf := a
+  valid := by simp
+
+section Bytes
+
+variable {n : Nat}
+
+@[inline] def pos (inp : Input ByteArray Char n) : Nat := inp.buf.size - n
+
+theorem pos_lt (inp : Input ByteArray Char (n + 1)) : inp.pos < inp.buf.size := by
+  have := inp.valid; simp only [pos, size_byteArray] at *; omega
+
+@[inline] def head (inp : Input ByteArray Char (n + 1)) : UInt8 :=
+  have := inp.pos_lt
+  inp.buf[inp.pos]
+
+def ofString (s : String) : Input ByteArray Char s.toUTF8.size where
+  buf := s.toUTF8
+  valid := by simp
+
 /-- Collect characters while `f` holds, returning them as a `String`. -/
-@[specialize] def takeWhile (f : Char → Bool) {n : Nat} (t : Input n) : String :=
-  go t ""
+@[specialize] def takeWhile (f : Char → Bool) {n : Nat} (inp : Input ByteArray Char n) : String :=
+  go inp ""
 where
-  @[specialize] go {m : Nat} (t : Input m) (acc : String) : String :=
-    match h : t.nextChar with
+  @[specialize] go {m : Nat} (inp : Input ByteArray Char m) (acc : String) : String :=
+    match h : inp.nextTok with
     | some c =>
       if f c then
-        have := t.utf8Size_le h
+        have : c.utf8Size ≤ m := by simpa using inp.width_le h
         have := Char.utf8Size_pos c
-        go (t.advance c) (acc.push c)
+        go (inp.advance c) (acc.push c)
       else acc
     | none => acc
+  termination_by m
 
-section
-
-variable {f : Char → Bool} {c : Char} {t : Input n} {acc : String}
+variable {f : Char → Bool} {c : Char} {inp : Input ByteArray Char n} {acc : String}
 
 theorem takeWhile_go_accept
-  (h : t.nextChar = some c := by assumption)
+  (h : inp.nextTok = some c := by assumption)
   (hf : f c := by assumption)
-  : takeWhile.go f t acc = takeWhile.go f (t.advance c) (acc.push c) := by
+  : takeWhile.go f inp acc = takeWhile.go f (inp.advance c) (acc.push c) := by
   rw [takeWhile.go]; split <;> simp_all; subst_vars; rfl
 
 theorem takeWhile_go_reject
-  (h : t.nextChar = some c := by assumption)
+  (h : inp.nextTok = some c := by assumption)
   (hf : ¬ f c := by assumption)
-  : takeWhile.go f t acc = acc := by
+  : takeWhile.go f inp acc = acc := by
   rw [takeWhile.go]; split <;> simp_all
 
 theorem takeWhile_go_eof
-  (h : t.nextChar = none := by assumption)
-  : takeWhile.go f t acc = acc := by
+  (h : inp.nextTok = none := by assumption)
+  : takeWhile.go f inp acc = acc := by
   rw [takeWhile.go]; split <;> simp_all
 
 theorem takeWhile_reject
-  (h : t.nextChar = some c := by assumption)
+  (h : inp.nextTok = some c := by assumption)
   (hf : ¬ f c := by assumption)
-  : takeWhile f t = "" := by rw [takeWhile, takeWhile_go_reject]
+  : takeWhile f inp = "" := by rw [takeWhile, takeWhile_go_reject]
 
 theorem takeWhile_eof
-  (h : t.nextChar = none)
-  : takeWhile f t = "" := by rw [takeWhile, takeWhile_go_eof]
+  (h : inp.nextTok = none)
+  : takeWhile f inp = "" := by rw [takeWhile, takeWhile_go_eof]
 
 private theorem utf8ByteSize_takeWhile_go
   (f : Char → Bool)
-  (t : Input n)
+  (inp : Input ByteArray Char n)
   (acc : String)
-  : (takeWhile.go f t acc).utf8ByteSize + (skipWhile f t).val = acc.utf8ByteSize + n := by
-  fun_induction takeWhile.go f t acc with
+  : (takeWhile.go f inp acc).utf8ByteSize + (skipWhile f inp).val = acc.utf8ByteSize + n := by
+  fun_induction takeWhile.go f inp acc with
   | case1 =>
     rw [skipWhile_accept]
-    simp only [String.utf8ByteSize_push] at *
+    simp only [String.utf8ByteSize_push, width_byteArray] at *
     omega
   | case2 => rw [skipWhile_reject]
   | case3 => rw [skipWhile_eof]
 
 theorem utf8ByteSize_takeWhile
   (f : Char → Bool)
-  (t : Input n)
-  : (takeWhile f t).utf8ByteSize + (skipWhile f t).val = n := by
+  (inp : Input ByteArray Char n)
+  : (takeWhile f inp).utf8ByteSize + (skipWhile f inp).val = n := by
   simp [takeWhile, utf8ByteSize_takeWhile_go]
 
 theorem val_skipWhile
   (f : Char → Bool)
-  (t : Input n)
-  : (skipWhile f t).val = n - (takeWhile f t).utf8ByteSize := by
-  have := utf8ByteSize_takeWhile f t
+  (inp : Input ByteArray Char n)
+  : (skipWhile f inp).val = n - (takeWhile f inp).utf8ByteSize := by
+  have := utf8ByteSize_takeWhile f inp
   omega
 
 /-- A character the predicate accepts is part of what `takeWhile` collects. -/
 theorem utf8Size_le_utf8ByteSize_takeWhile
-  (h : t.nextChar = some c := by assumption)
+  (h : inp.nextTok = some c := by assumption)
   (hf : f c := by assumption)
-  : c.utf8Size ≤ (takeWhile f t).utf8ByteSize := by
-  have := skipWhile_accept
-  have := skipWhile f (t.advance c) |>.property
-  have := utf8ByteSize_takeWhile f t
-  have := t.utf8Size_le h
+  : c.utf8Size ≤ (takeWhile f inp).utf8ByteSize := by
+  have := skipWhile_accept (f := f) (t := c)
+  have := skipWhile f (inp.advance c) |>.property
+  have := utf8ByteSize_takeWhile f inp
+  have : c.utf8Size ≤ n := by simpa using inp.width_le h
+  simp only [width_byteArray] at *
   omega
 
-/-- The scanners make progress exactly when the next character is accepted. -/
-theorem skipWhile_lt_iff {f : Char → Bool} {t : Input n}
-  : (skipWhile f t).val < n ↔ ∃ c, t.nextChar = some c ∧ f c := by
-  fun_cases skipWhile f t <;> simp_all; omega
-
-theorem utf8ByteSize_takeWhile_pos_iff (f : Char → Bool) (t : Input n)
-  : 0 < (takeWhile f t).utf8ByteSize ↔ ∃ c, t.nextChar = some c ∧ f c := by
+theorem utf8ByteSize_takeWhile_pos_iff (f : Char → Bool) (inp : Input ByteArray Char n)
+  : 0 < (takeWhile f inp).utf8ByteSize ↔ ∃ c, inp.nextTok = some c ∧ f c := by
   rw [← skipWhile_lt_iff]
-  have := utf8ByteSize_takeWhile f t
+  have := utf8ByteSize_takeWhile f inp
   omega
 
-end
+end Bytes
 
 end Input

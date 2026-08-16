@@ -1,4 +1,5 @@
 import PrimParser.Basic
+import PrimParser.Buffer
 import PrimParser.Char
 import PrimParser.GradedMonad
 import PrimParser.Input

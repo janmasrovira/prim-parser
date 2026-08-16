@@ -10,6 +10,7 @@ Lawful instances for `Success`, `Outcome`, and `Parser`:
 namespace Parser
 
 variable
+  {σ τ : Type} [Buffer σ τ]
   {α β γ ε : Type}
   {n m : Nat}
   {g g' : Grade}
@@ -29,16 +30,16 @@ instance : LawfulGradedFunctor (Success n) where
   gmap_id _ := rfl
   gmap_comp _ _ _ := rfl
 
-instance : LawfulGradedFunctor (Parser ε) where
+instance : LawfulGradedFunctor (Parser σ τ ε) where
   gmap_id x := by ext m t; exact id_map (x.run t)
   gmap_comp g h x := by ext m t; exact comp_map h g (x.run t)
 
 theorem heq
   {g1 g2 : Grade}
-  {p : Parser ε g1 α}
-  {q : Parser ε g2 α}
+  {p : Parser σ τ ε g1 α}
+  {q : Parser σ τ ε g2 α}
   (hg : g1 = g2)
-  (h : ∀ {m} (t : Input m), p.run t ≍ q.run t)
+  (h : ∀ {m} (t : Input σ τ m), p.run t ≍ q.run t)
   : p ≍ q := by
   subst hg; apply heq_of_eq; ext m t; exact eq_of_heq (h t)
 
@@ -92,9 +93,9 @@ theorem Outcome.success_congr
   subst hc; rw [eq_of_heq hs]
 
 theorem bind_run
-  (m : Parser ε g α)
-  (f : α → Parser ε g' β)
-  (t : Input n)
+  (m : Parser σ τ ε g α)
+  (f : α → Parser σ τ ε g' β)
+  (t : Input σ τ n)
   : (bind m f).run t
       = match m.run t with
         | failure e => failure e
@@ -113,7 +114,7 @@ theorem bind_run
 theorem gpure_gbind
   {j : Grade}
   (a : α)
-  (f : α → Parser ε j β)
+  (f : α → Parser σ τ ε j β)
   : (gpure a >>=ᵍ f) ≍ f a := by
   apply Parser.heq (one_mul j)
   intro m t
@@ -122,7 +123,7 @@ theorem gpure_gbind
   | failure e => rfl
   | success y => cases y; rfl
 
-theorem gbind_gpure {i : Grade} (p : Parser ε i α) : (p >>=ᵍ gpure) ≍ p := by
+theorem gbind_gpure {i : Grade} (p : Parser σ τ ε i α) : (p >>=ᵍ gpure) ≍ p := by
   have hc := congrArg Grade.consumes (mul_one i)
   apply Parser.heq (mul_one i)
   intro m t
@@ -134,9 +135,9 @@ theorem gbind_gpure {i : Grade} (p : Parser ε i α) : (p >>=ᵍ gpure) ≍ p :=
 
 theorem gbind_assoc
   {i j k : Grade}
-  (x : Parser ε i α)
-  (f : α → Parser ε j β)
-  (g : β → Parser ε k γ)
+  (x : Parser σ τ ε i α)
+  (f : α → Parser σ τ ε j β)
+  (g : β → Parser σ τ ε k γ)
   : (x >>=ᵍ f >>=ᵍ g) ≍ (x >>=ᵍ fun a => f a >>=ᵍ g) := by
   have hc := congrArg Grade.consumes (mul_assoc i j k)
   apply Parser.heq (mul_assoc i j k)
@@ -158,13 +159,13 @@ theorem gbind_assoc
 theorem gmap_gpure
   (G : α → β)
   (x : α)
-  : (G <$>ᵍ (gpure x : Parser ε 1 α)) = gpure (G x) := by
+  : (G <$>ᵍ (gpure x : Parser σ τ ε 1 α)) = gpure (G x) := by
   ext m t; simp [GradedFunctor.gmap, gpure, Functor.map]
 
 theorem gpure_gseq
   {i : Grade}
   (G : α → β)
-  (x : Parser ε i α)
+  (x : Parser σ τ ε i α)
   : (gpure G <*>ᵍ fun () => x) ≍ (G <$>ᵍ x) := by
   have hc := congrArg Grade.consumes (one_mul i)
   apply Parser.heq (one_mul i)
@@ -178,7 +179,7 @@ theorem gpure_gseq
 
 theorem gseq_gpure
   {i : Grade}
-  (u : Parser ε i (α → β))
+  (u : Parser σ τ ε i (α → β))
   (x : α)
   : (u <*>ᵍ fun () => gpure x) ≍ ((· x) <$>ᵍ u) := by
   have hc := congrArg Grade.consumes (mul_one i)
@@ -192,9 +193,9 @@ theorem gseq_gpure
 
 theorem gseq_assoc
   {i j k : Grade}
-  (u : Parser ε i (β → γ))
-  (v : Parser ε j (α → β))
-  (w : Parser ε k α)
+  (u : Parser σ τ ε i (β → γ))
+  (v : Parser σ τ ε j (α → β))
+  (w : Parser σ τ ε k α)
   : ((Function.comp <$>ᵍ u <*>ᵍ fun () => v) <*>ᵍ fun () => w)
       ≍ (u <*>ᵍ fun () => (v <*>ᵍ fun () => w)) := by
   have hc := congrArg Grade.consumes (mul_assoc i j k)
@@ -214,13 +215,13 @@ theorem gseq_assoc
       | failure e => exact Outcome.failure_congr hc
       | success c => exact Outcome.success_congr hc Success.seq_assoc
 
-instance : LawfulGradedApplicative (Parser ε) where
+instance : LawfulGradedApplicative (Parser σ τ ε) where
   gmap_gpure := gmap_gpure
   gpure_gseq := gpure_gseq
   gseq_gpure := gseq_gpure
   gseq_assoc := gseq_assoc
 
-instance : LawfulGradedMonad (Parser ε) where
+instance : LawfulGradedMonad (Parser σ τ ε) where
   gpure_gbind := gpure_gbind
   gbind_gpure := gbind_gpure
   gbind_assoc := gbind_assoc

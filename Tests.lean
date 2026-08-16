@@ -5,3 +5,4 @@ import Tests.Examples.Csv
 import Tests.Examples.Json
 import Tests.Examples.SExp
 import Tests.Examples.Lambda
+import Tests.Examples.Lexer

@@ -1,6 +1,6 @@
 import PrimParser
 
-open Parser
+open Parser Parser.Char
 
 #guard anyChar.runOption "abc" == some 'a'
 #guard anyChar.runOption "" == none
@@ -104,7 +104,7 @@ open Parser
 #guard int.runOption "-x" == none
 
 -- chainl1
-private def plus : Parser Error conditional (Nat → Nat → Nat) := gdo
+private def plus : StringParser conditional (Nat → Nat → Nat) := gdo
   let _ ← satisfy (· == '+')
   return (· + ·)
 
@@ -160,7 +160,7 @@ private def plus : Parser Error conditional (Nat → Nat → Nat) := gdo
 #guard (manyTill anyChar (char '.')).runOption "." == some []
 
 -- withRecovery
-private def recoverDigit : Error → Parser Error conditional Nat :=
+private def recoverDigit : Error → StringParser conditional Nat :=
   fun _ => digit
 
 #guard (withRecovery recoverDigit (char 'x' >>=ᵍ fun _ => gpure 99)).runOption "x"
@@ -169,7 +169,7 @@ private def recoverDigit : Error → Parser Error conditional Nat :=
     == some 5
 
 -- tryResume
-private def alwaysFail : Parser Error conditional Char := satisfy (fun _ => false)
+private def alwaysFail : StringParser conditional Char := satisfy (fun _ => false)
 #guard (tryResume alwaysFail anyChar).runOption "abc" == some 'b'
 #guard (tryResume (withBacktracking alwaysFail) anyChar).runOption "abc" == some 'a'
 

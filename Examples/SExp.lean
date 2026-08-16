@@ -1,6 +1,6 @@
 import PrimParser
 
-open Parser
+open Parser Parser.Char
 
 inductive SExp where
   | atom (str : String)
@@ -14,12 +14,12 @@ private def listToPairs : List SExp → SExp
   | x :: xs => .pair x (listToPairs xs)
   | [] => .atom ""
 
-def patom : Parser Error conditional SExp :=
+def patom : StringParser conditional SExp :=
   .atom <$>ᵍ takeWhile1 (·.isAlphanum)
 
-def sexp : Parser Error conditional SExp :=
+def sexp : StringParser conditional SExp :=
   fix (fun sexp_rec =>
-    let plist : Parser Error conditional SExp := gdo
+    let plist : StringParser conditional SExp := gdo
       lexeme lparen
       let first ← sexp_rec
       let rest ← many (gdo whitespace; sexp_rec)

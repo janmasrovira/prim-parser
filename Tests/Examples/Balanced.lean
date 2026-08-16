@@ -1,7 +1,7 @@
 import Examples.Balanced
 import Tests.Basic
 
-open Parser Balanced
+open Parser Parser.Char Balanced
 
 #guard group.runOption "()" == some ()
 #guard group.runOption "(())" == some ()

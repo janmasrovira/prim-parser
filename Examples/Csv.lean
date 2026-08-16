@@ -6,7 +6,7 @@
 -- - Rows separated by newline (\n)
 import PrimParser
 
-open Parser
+open Parser Parser.Char
 
 namespace Csv
 
@@ -33,45 +33,45 @@ instance : BEq ((n : Nat) × Table n) where
 
 private def newline := char '\n'
 
-private def escapedQuote : Parser Error conditional Char := gdo
+private def escapedQuote : StringParser conditional Char := gdo
   dquote
   dquote
   return '\"'
 
-private def quotedField : Parser Error conditional String := gdo
+private def quotedField : StringParser conditional String := gdo
   dquote
   let cs ← many (escapedQuote <|> satisfy (· != '\"'))
   dquote
   return String.ofList cs
 
-private def unquotedField : Parser Error flexible String :=
+private def unquotedField : StringParser flexible String :=
   takeWhile (fun c => c != ',' && c != '\"' && c != '\n')
 
-private def field : Parser Error flexible String :=
+private def field : StringParser flexible String :=
   quotedField <|> unquotedField
 
-private def int : Parser Error conditional Int := gdo
+private def int : StringParser conditional Int := gdo
   let neg ← optional (char '-')
   let n ← nat
   return if neg.isSome then -↑n else ↑n
 
-private def value : Parser Error flexible Value :=
+private def value : StringParser flexible Value :=
   .int <$>ᵍ int <|> .str <$>ᵍ unquotedField
 
-private def quotedValue : Parser Error conditional Value := gdo
+private def quotedValue : StringParser conditional Value := gdo
   let s ← quotedField
   return .str s
 
-private def cell : Parser Error flexible Value :=
+private def cell : StringParser flexible Value :=
   quotedValue <|> value
 
-def row : Parser Error flexible (List String) :=
+def row : StringParser flexible (List String) :=
   sepBy comma field
 
-private def exactRow (n : Nat) : Parser Error fallible (List.Vector Value n) :=
+private def exactRow (n : Nat) : StringParser fallible (List.Vector Value n) :=
   sepByN comma cell n
 
-def table : Parser Error conditional ((n : Nat) × Table n) := gdo
+def table : StringParser conditional ((n : Nat) × Table n) := gdo
   let headers ← row
   newline
   let n := headers.length

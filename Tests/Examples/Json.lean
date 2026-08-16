@@ -1,7 +1,7 @@
 import Examples.Json
 import Tests.Basic
 
-open Parser Json
+open Parser Parser.Char Json
 
 #guard json.runOption "null" == some .null
 #guard json.runOption "true" == some (.bool true)

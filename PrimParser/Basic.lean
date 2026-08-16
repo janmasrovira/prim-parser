@@ -3,6 +3,8 @@ import PrimParser.Input
 import PrimParser.Necessity
 import PrimParser.GradedMonad
 
+open Buffer
+
 /-!
 # PrimParser
 
@@ -162,9 +164,9 @@ end Parser
 
 /-- A parser with error type `ε`, static grade `g`, and result type `α`.
 The grade tracks error and consumption behavior at the type level. -/
-structure Parser (ε : Type) (g : Grade) (α : Type) where
-  run : ∀ {n}, Input n → Parser.Outcome ε n g.consumes α
-  sound : ∀ {n} (t : Input n), Parser.Outcome.Sound g.errors (run t) := by
+structure Parser (σ τ : Type) [Buffer σ τ] (ε : Type) (g : Grade) (α : Type) where
+  run : ∀ {n}, Input σ τ n → Parser.Outcome ε n g.consumes α
+  sound : ∀ {n} (inp : Input σ τ n), Parser.Outcome.Sound g.errors (run inp) := by
     intro _ _
     first
       | assumption
@@ -173,7 +175,10 @@ structure Parser (ε : Type) (g : Grade) (α : Type) where
 
 namespace Parser
 
+abbrev TokenParser (τ : Type) (g : Grade) (α : Type) : Type := Parser (Array τ) τ Error g α
+
 variable
+  {σ τ : Type} [Buffer σ τ]
   {α β γ ε ε' : Type}
   {n m : Nat}
   {g g' : Grade}
@@ -181,8 +186,8 @@ variable
   {gc gc' : Necessity} -- used for `consumes`
 
 @[ext] theorem ext
-  {p q : Parser ε g α}
-  (h : ∀ {m} (t : Input m), p.run t = q.run t)
+  {p q : Parser σ τ ε g α}
+  (h : ∀ {m} (t : Input σ τ m), p.run t = q.run t)
   : p = q := by
   obtain ⟨pr, ps⟩ := p; obtain ⟨qr, qs⟩ := q
   have hr : @pr = @qr := by funext m t; exact h t
@@ -289,15 +294,15 @@ def Success.trans (s : Success m gc α) (h : m ≤ n) : Success n (gc ⊔ possib
   witness := consumptionWitness.trans r1.witness r2.witness
 
 @[inline, simp] def Success.bindParser {xc fe fc : Necessity}
-  (t : Input n)
+  (t : Input σ τ n)
   (x : Success n xc α)
-  (f : α → Parser ε ⟨fe, fc⟩ β)
+  (f : α → Parser σ τ ε ⟨fe, fc⟩ β)
   : Outcome ε n (xc ⊔ fc) β :=
   match f x.result |>.run (t.dropTo x.restSize x.le) with
   | failure e => failure (e.trans x.le)
   | success y => success (x.seq y)
 
-instance : GradedFunctor (Parser ε) where
+instance : GradedFunctor (Parser σ τ ε) where
   gmap f p :=
     { run t := f <$> p.run t
       sound t := Outcome.map_sound f (p.run t) (p.sound t) }
@@ -309,23 +314,23 @@ theorem Outcome.throw_sound {e : ε} (h : possibly ≤ ge)
   : Sound ge (Outcome.throw (α := α) (gc := gc) (n := n) e) := h
 
 @[inline] def handle
-  (p : Parser ε g α)
-  (onSuccess : ∀ {n}, Input n →
+  (p : Parser σ τ ε g α)
+  (onSuccess : ∀ {n}, Input σ τ n →
     g.errors ≤ possibly → Success n g.consumes α → Outcome ε' n g'.consumes β)
-  (soundSuccess : ∀ {n} {t : Input n} h r, Outcome.Sound g'.errors (onSuccess t h r))
-  (onError : ∀ {n}, Input n →
+  (soundSuccess : ∀ {n} {t : Input σ τ n} h r, Outcome.Sound g'.errors (onSuccess t h r))
+  (onError : ∀ {n}, Input σ τ n →
     possibly ≤ g.errors → Failure n ε → Outcome ε' n g'.consumes β)
-  (soundError : ∀ {n} {t : Input n} h f, Outcome.Sound g'.errors (onError t h f))
-  : Parser ε' g' β where
+  (soundError : ∀ {n} {t : Input σ τ n} h f, Outcome.Sound g'.errors (onError t h f))
+  : Parser σ τ ε' g' β where
   run t := p.run t |>.handle (p.sound t) (onSuccess t) (onError t)
   sound t := Outcome.handle_sound (p.sound t) (soundSuccess (t := t)) soundError
 
 /-- Monadic bind for parsers. The resulting grade is the product (max)
 of the two grades. -/
 def bind
-  (m : Parser ε g α)
-  (f : α → Parser ε g' β)
-  : Parser ε (g * g') β :=
+  (m : Parser σ τ ε g α)
+  (f : α → Parser σ τ ε g' β)
+  : Parser σ τ ε (g * g') β :=
   m.handle
     (onSuccess := fun t _ x => x.bindParser t f)
     (soundSuccess := fun {_} {t} h x => by
@@ -340,7 +345,7 @@ def bind
     (onError := fun _ _ e => failure e)
     (soundError := fun h _e => le_sup_of_le_left h)
 
-instance : IsEmpty (Parser ε impossible α) where
+instance : IsEmpty (Parser σ τ ε impossible α) where
   false p := by
     have h := p.sound Input.empty
     cases hr : p.run Input.empty with
@@ -348,29 +353,29 @@ instance : IsEmpty (Parser ε impossible α) where
     | success s => have := s.witness; omega
 
 /-- Lift a value into a parser that consumes nothing and never fails. -/
-abbrev pure (a : α) : Parser ε 1 α where
+abbrev pure (a : α) : Parser σ τ ε 1 α where
   run {n} _ := success { result := a, restSize := n, witness := rfl }
 
-instance : GradedApplicative (Parser ε) where
+instance : GradedApplicative (Parser σ τ ε) where
   gpure := pure
   gseq f g := bind f fun f' =>
     { run t := f' <$> (g ()).run t
       sound t := Outcome.map_sound f' ((g ()).run t) ((g ()).sound t) }
 
-instance : GradedMonad (Parser ε) where
+instance : GradedMonad (Parser σ τ ε) where
   gbind := bind
 
-theorem gbind_run (m : Parser ε g α) (k : α → Parser ε g' β) (t : Input n)
+theorem gbind_run (m : Parser σ τ ε g α) (k : α → Parser σ τ ε g' β) (t : Input σ τ n)
   : (m >>=ᵍ k).run t
     = (m.run t).handle (m.sound t) (fun _ x => x.bindParser t k) (fun _ e => failure e) := rfl
 
 private def fixGo [ParserError ε]
   {n : Nat}
   (h : possibly ≤ ge)
-  (f : Parser ε ⟨ge, always⟩ α → Parser ε ⟨ge, always⟩ α)
-  (t : Input n)
+  (f : Parser σ τ ε ⟨ge, always⟩ α → Parser σ τ ε ⟨ge, always⟩ α)
+  (t : Input σ τ n)
   : {o : Outcome ε n always α // Outcome.Sound ge o} :=
-  let self : Parser ε ⟨ge, always⟩ α :=
+  let self : Parser σ τ ε ⟨ge, always⟩ α :=
     { run {k} t' :=
         if hk : k < n
         then fixGo h f t' |>.val
@@ -385,9 +390,9 @@ private def fixGo [ParserError ε]
 /-- Build a recursive parser via a fixpoint. Termination is guaranteed by
 requiring the body to always consume input. -/
 def fix [ParserError ε]
-  (f : Parser ε ⟨ge, always⟩ α → Parser ε ⟨ge, always⟩ α)
+  (f : Parser σ τ ε ⟨ge, always⟩ α → Parser σ τ ε ⟨ge, always⟩ α)
   (h : possibly ≤ ge := by simp)
-  : Parser ε ⟨ge, always⟩ α where
+  : Parser σ τ ε ⟨ge, always⟩ α where
   run t := fixGo h f t |>.val
   sound t := fixGo h f t |>.property
 
@@ -404,7 +409,7 @@ private theorem consumptionWitness.ite_left
   cases ge' <;> cases gc <;> cases gc' <;> first | contradiction | simp; omega
 
 /-- Run `p`. If it fails, restores the original input. -/
-def withBacktracking {g} (p : Parser ε g α) : Parser ε g α :=
+def withBacktracking {g} (p : Parser σ τ ε g α) : Parser σ τ ε g α :=
   p.handle
     (onSuccess := fun _ _ s => success s)
     (soundSuccess := fun h _ => h)
@@ -413,9 +418,9 @@ def withBacktracking {g} (p : Parser ε g α) : Parser ε g α :=
 
 /-- Try `p1`; if it fails, run `p2`. -/
 def choice
-  (p1 : Parser ε ⟨ge, gc⟩ α)
-  (p2 : Parser ε ⟨ge', gc'⟩ α)
-  : Parser ε ⟨ge ⊓ ge', ge.ite gc' gc⟩ α :=
+  (p1 : Parser σ τ ε ⟨ge, gc⟩ α)
+  (p2 : Parser σ τ ε ⟨ge', gc'⟩ α)
+  : Parser σ τ ε ⟨ge ⊓ ge', ge.ite gc' gc⟩ α :=
   p1.handle
     (onSuccess := fun _ hge s => success
       { s with witness := consumptionWitness.ite_left hge s.witness })
@@ -433,9 +438,9 @@ infixl:20 " <|> " => choice
 
 /-- try `p1`; if it fails *without consuming*, then try `p2` -/
 def committedChoice
-  (p1 : Parser ε ⟨ge, gc⟩ α)
-  (p2 : Parser ε ⟨ge', gc'⟩ α)
-  : Parser ε ⟨ge ⊓ (ge' ⊔ possibly), ge.ite gc' gc⟩ α :=
+  (p1 : Parser σ τ ε ⟨ge, gc⟩ α)
+  (p2 : Parser σ τ ε ⟨ge', gc'⟩ α)
+  : Parser σ τ ε ⟨ge ⊓ (ge' ⊔ possibly), ge.ite gc' gc⟩ α :=
   p1.handle
     (onSuccess := fun _ hge s => success
       { s with witness := consumptionWitness.ite_left hge s.witness })
@@ -461,9 +466,9 @@ def committedChoice
 
 /-- Try `p1` first, if it fails with `Failure f`, run `p2` on the input left at `f.restSize` -/
 def tryResume
-  (p1 : Parser ε ⟨ge, gc⟩ α)
-  (p2 : Parser ε ⟨ge', gc'⟩ α)
-  : Parser ε ⟨ge ⊓ ge', ge.ite (gc' ⊔ possibly) gc⟩ α :=
+  (p1 : Parser σ τ ε ⟨ge, gc⟩ α)
+  (p2 : Parser σ τ ε ⟨ge', gc'⟩ α)
+  : Parser σ τ ε ⟨ge ⊓ ge', ge.ite (gc' ⊔ possibly) gc⟩ α :=
   p1.handle
     (onSuccess := fun _ hge s => success
       { s with witness := consumptionWitness.ite_left hge s.witness })
@@ -481,9 +486,9 @@ def tryResume
       (soundSuccess := fun hge' _ => inf_le_right.trans hge'))
 
 /-- Try each parser in the list in order, returning the first success. -/
-def oneOf (l : NonEmptyList (Parser ε g α)) : Parser ε g α :=
-  let rec go (l : List (Parser ε g α)) (p : l.length ≠ 0 := by simp)
-      : Parser ε g α :=
+def oneOf (l : NonEmptyList (Parser σ τ ε g α)) : Parser σ τ ε g α :=
+  let rec go (l : List (Parser σ τ ε g α)) (p : l.length ≠ 0 := by simp)
+      : Parser σ τ ε g α :=
     match l with
     | [] => nomatch p
     | [x] => x
@@ -493,7 +498,7 @@ def oneOf (l : NonEmptyList (Parser ε g α)) : Parser ε g α :=
   go l.1 (p := by simpa using l.2)
 
 /-- A parser that always fails with error `e`. -/
-def throw (e : ε) (c : possibly ≤ ge := by simp) : Parser ε ⟨ge, gc⟩ α where
+def throw (e : ε) (c : possibly ≤ ge := by simp) : Parser σ τ ε ⟨ge, gc⟩ α where
   run _ := Outcome.throw e
 
 def Success.relaxConsumes (p : Success n gc α) : Success n (gc ⊓ possibly) α :=
@@ -502,7 +507,7 @@ def Success.relaxConsumes (p : Success n gc α) : Success n (gc ⊓ possibly) α
   | always => { p with witness := le_of_lt p.witness }
 
 /-- Weaken the consumption grade by capping at `possibly`. -/
-def relaxConsumes (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge, gc ⊓ possibly⟩ α :=
+def relaxConsumes (p : Parser σ τ ε ⟨ge, gc⟩ α) : Parser σ τ ε ⟨ge, gc ⊓ possibly⟩ α :=
   p.handle
     (onSuccess := fun _ _ r => success r.relaxConsumes)
     (soundSuccess := fun h _ => h)
@@ -510,7 +515,7 @@ def relaxConsumes (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge, gc ⊓ poss
     (soundError := fun h _ => h)
 
 /-- Weaken the error grade by capping at `possibly`. -/
-def relaxErrors (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge ⊓ possibly, gc⟩ α :=
+def relaxErrors (p : Parser σ τ ε ⟨ge, gc⟩ α) : Parser σ τ ε ⟨ge ⊓ possibly, gc⟩ α :=
   p.handle
     (onSuccess := fun _ _ r => success r)
     (soundSuccess := fun _ _ => inf_le_right)
@@ -518,11 +523,11 @@ def relaxErrors (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge ⊓ possibly, 
     (soundError := fun h _ => le_inf h le_rfl)
 
 /-- Cap both error and consumption grades at `possibly`. -/
-def relax (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge ⊓ possibly, gc ⊓ possibly⟩ α :=
+def relax (p : Parser σ τ ε ⟨ge, gc⟩ α) : Parser σ τ ε ⟨ge ⊓ possibly, gc ⊓ possibly⟩ α :=
   p.relaxErrors.relaxConsumes
 
 /-- Forget consumption precision, setting it to `possibly`. -/
-def weakenConsumes (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge, possibly⟩ α :=
+def weakenConsumes (p : Parser σ τ ε ⟨ge, gc⟩ α) : Parser σ τ ε ⟨ge, possibly⟩ α :=
   p.handle
     (onSuccess := fun _ _ r => success r.weakenConsumes)
     (soundSuccess := fun h _ => h)
@@ -530,7 +535,7 @@ def weakenConsumes (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨ge, possibly�
     (soundError := fun h _ => h)
 
 /-- Forget error precision, setting it to `possibly`. -/
-def weakenErrors (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨possibly, gc⟩ α :=
+def weakenErrors (p : Parser σ τ ε ⟨ge, gc⟩ α) : Parser σ τ ε ⟨possibly, gc⟩ α :=
   p.handle
     (onSuccess := fun _ _ r => success r)
     (soundSuccess := fun _ _ => le_rfl)
@@ -538,11 +543,11 @@ def weakenErrors (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨possibly, gc⟩ 
     (soundError := fun _ _ => le_rfl)
 
 /-- Weaken both grades to `possibly`, yielding a `fallible` parser. -/
-def weaken (p : Parser ε ⟨ge, gc⟩ α) : Parser ε fallible α :=
+def weaken (p : Parser σ τ ε ⟨ge, gc⟩ α) : Parser σ τ ε fallible α :=
   p.weakenErrors.weakenConsumes
 
 /-- Run a parser on a `Input`. -/
-def runOn (p : Parser ε g α) (t : Input n) : Except ε α :=
+def runOn (p : Parser σ τ ε g α) (t : Input σ τ n) : Except ε α :=
   (p.run t).handle (p.sound t) (fun _ r => .ok r.result) (fun _ f => .error f.error)
 
 abbrev Except.Sound (errors : Necessity) {α : Type} (r : Except ε α) : Prop :=
@@ -550,105 +555,105 @@ abbrev Except.Sound (errors : Necessity) {α : Type} (r : Except ε α) : Prop :
   | .error _ => possibly ≤ errors
   | .ok _ => errors ≤ possibly
 
-theorem runOn_sound (p : Parser ε g α) (t : Input n)
+theorem runOn_sound (p : Parser σ τ ε g α) (t : Input σ τ n)
   : Except.Sound g.errors (p.runOn t) :=
   Outcome.handle_prop (p.sound _) (fun h _ => h) (fun h _ => h)
 
-/-- Consume a single UTF-8 character. -/
-def anyChar : Parser Error conditional Char where
-  run {n} t :=
-    match h : t.nextChar with
-    | some c =>
-      have hle := t.utf8Size_le h
-      have hpos := Char.utf8Size_pos c
-      success { result := c
-                restSize := n - c.utf8Size }
+/-- Consume a single token. -/
+def anyTok : Parser σ τ Error conditional τ where
+  run {n} inp :=
+    match h : inp.nextTok with
+    | some t =>
+      have hle := inp.width_le h
+      have hpos := Buffer.width_pos (σ := σ) t
+      success { result := t
+                restSize := n - width σ t }
     | none => failure { error := Error.eof, restSize := n }
 
 section
 
-variable {c : Char} {t : Input n}
+variable {t : τ} {inp : Input σ τ n}
 
-theorem anyChar_run_some
-  (h : t.nextChar = some c := by assumption)
-  : anyChar.run t
-    = success { result := c
-                restSize := n - c.utf8Size
-                witness := Input.sub_utf8Size_lt h } := by
-  simp only [anyChar]; split <;> rw [h] at * <;> simp_all
+theorem anyTok_run_some
+  (h : inp.nextTok = some t := by assumption)
+  : anyTok.run inp
+    = success { result := t
+                restSize := n - width σ t
+                witness := Input.sub_width_lt h } := by
+  simp only [anyTok]; split <;> rw [h] at * <;> simp_all
 
-theorem anyChar_run_eof
-  (h : t.nextChar = none := by
-    first | assumption | exact Input.nextChar_eq_none)
-  : anyChar.run t
+theorem anyTok_run_eof
+  (h : inp.nextTok = none := by
+    first | assumption | exact Input.nextTok_eq_none)
+  : anyTok.run inp
     = failure { error := Error.eof
                 restSize := n } := by
-  simp only [anyChar]; split <;> simp_all
+  simp only [anyTok]; split <;> simp_all
 
 end
 
 /-- Like `gpure` but with a flexible grade: both `ge` and `gc` can be `never`
 or `possibly`. Useful in match branches where all cases must share the same grade. -/
 def ok (a : α) (he : ge ≤ possibly := by simp) (hc : gc ≤ possibly := by simp)
-  : Parser ε ⟨ge, gc⟩ α where
+  : Parser σ τ ε ⟨ge, gc⟩ α where
   run {n} _ := success { result := a, restSize := n, witness := consumptionWitness.rfl hc }
 
-/-- Consume a character and apply `f`; succeed with the result or fail if `f` returns `none`. -/
-def token (f : Char → Option α) : Parser Error conditional α := gdo
-  let c ← anyChar
-  (match f c with
+/-- Consume a token and apply `f`; succeed with the result or fail if `f` returns `none`. -/
+def token (f : τ → Option α) : Parser σ τ Error conditional α := gdo
+  let t ← anyTok
+  (match f t with
    | .some r => ok (gc := never) r
    | .none => throw (ge := possibly) Error.fail)
 
-/-- Consume a character that satisfies predicate `f`, or fail. -/
-def satisfy (f : Char → Bool) : Parser Error conditional Char :=
-  token (fun c => if f c then .some c else .none)
+/-- Consume a token that satisfies predicate `f`, or fail. -/
+def satisfy (f : τ → Bool) : Parser σ τ Error conditional τ :=
+  token (fun t => if f t then .some t else .none)
 
 section
 
-variable {f : Char → Bool} {c : Char} {t : Input n}
+variable {f : τ → Bool} {t : τ} {inp : Input σ τ n}
 
 theorem satisfy_run_accept
-  (h : t.nextChar = some c := by assumption)
-  (cond : f c = true := by assumption)
-  : (satisfy f).run t
-    = success { result := c
-                restSize := n - c.utf8Size
-                witness := Input.sub_utf8Size_lt h } := by
-  rw [satisfy, token, gbind_run, Outcome.handle_success anyChar_run_some]
+  (h : inp.nextTok = some t := by assumption)
+  (cond : f t = true := by assumption)
+  : (satisfy f).run inp
+    = success { result := t
+                restSize := n - width σ t
+                witness := Input.sub_width_lt h } := by
+  rw [satisfy, token, gbind_run, Outcome.handle_success anyTok_run_some]
   simp [ok, cond]
 
 theorem satisfy_run_reject
-  (h : t.nextChar = some c := by assumption)
-  (hf : ¬ f c := by assumption)
-  : (satisfy f).run t
+  (h : inp.nextTok = some t := by assumption)
+  (hf : ¬ f t := by assumption)
+  : (satisfy f).run inp
     = failure { error := Error.fail
-                restSize := n - c.utf8Size } := by
-  have : consumptionWitness (n - c.utf8Size) n always := by
-    have := t.utf8Size_le h
-    have := Char.utf8Size_pos c
+                restSize := n - width σ t } := by
+  have : consumptionWitness (n - width σ t) n always := by
+    have := inp.width_le h
+    have := Buffer.width_pos (σ := σ) t
     omega
   simp [satisfy, token, gbind_run]
-  rw [Outcome.handle_success anyChar_run_some]
+  rw [Outcome.handle_success anyTok_run_some]
   simp [throw, Outcome.throw, hf, Failure.trans]
 
 theorem satisfy_run_eof
-  (h : t.nextChar = none := by
-    first | assumption | exact Input.nextChar_eq_none)
-  : (satisfy f).run t
+  (h : inp.nextTok = none := by
+    first | assumption | exact Input.nextTok_eq_none)
+  : (satisfy f).run inp
     = failure { error := Error.eof
                 restSize := n } := by
   simp only [satisfy, token, gbind_run]
-  rw [Outcome.handle_failure anyChar_run_eof]
+  rw [Outcome.handle_failure anyTok_run_eof]
 
 end
 
 /-- Like `satisfy` but returns `PUnit`. -/
-def skipSatisfy (f : Char → Bool) : Parser Error conditional PUnit :=
+def skipSatisfy (f : τ → Bool) : Parser σ τ Error conditional PUnit :=
   () <$ᵍ satisfy f
 
 /-- Try `p`; return `some result` on success or `none` on failure, never failing itself. -/
-def optional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ (Option α) where
+def optional (p : Parser σ τ ε ⟨ge, gc⟩ α) : Parser σ τ ε ⟨never, ge.complement ⊓ gc⟩ (Option α) where
   run {n} t := success <| match p.run t, p.sound t with
     | failure _, hs =>
       { result := .none
@@ -660,22 +665,22 @@ def optional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement
         witness := consumptionWitness.inf_of_possibly_le (Necessity.le_compl hs) r.witness }
 
 /-- Try `p`; return the result on success or the default value `d` on failure. -/
-def optionalD (p : Parser ε ⟨ge, gc⟩ α) (d : α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ α :=
+def optionalD (p : Parser σ τ ε ⟨ge, gc⟩ α) (d : α) : Parser σ τ ε ⟨never, ge.complement ⊓ gc⟩ α :=
   (·.getD d) <$>ᵍ optional p
 
 /-- Try `p`, discarding the result; never fails. -/
-def skipOptional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ PUnit :=
+def skipOptional (p : Parser σ τ ε ⟨ge, gc⟩ α) : Parser σ τ ε ⟨never, ge.complement ⊓ gc⟩ PUnit :=
   () <$ᵍ optional p
 
 /-- Try `p`; report whether it succeeded, never failing itself. -/
-def test (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ Bool :=
+def test (p : Parser σ τ ε ⟨ge, gc⟩ α) : Parser σ τ ε ⟨never, ge.complement ⊓ gc⟩ Bool :=
   Option.isSome <$>ᵍ optional p
 
 /-- Repeatedly apply `p` until `e` succeeds, collecting the results of `p`. -/
 def manyTill [ParserError ε]
-  (p : Parser ε ⟨ge, always⟩ α)
-  (e : Parser ε ⟨ge', always⟩ β)
-  : Parser ε ⟨ge, always⟩ (List α) :=
+  (p : Parser σ τ ε ⟨ge, always⟩ α)
+  (e : Parser σ τ ε ⟨ge', always⟩ β)
+  : Parser σ τ ε ⟨ge, always⟩ (List α) :=
   match ge with
   | always => (fun x => [x]) <$>ᵍ p
   | never => IsEmpty.false p |>.elim
@@ -687,9 +692,9 @@ def manyTill [ParserError ε]
         )
 
 /-- Apply `p` zero or more times, collecting results. Requires `p` to always consume. -/
-def many (p : Parser ε ⟨ge, always⟩ α) : Parser ε flexible (List α) where
+def many (p : Parser σ τ ε ⟨ge, always⟩ α) : Parser σ τ ε flexible (List α) where
   run :=
-    let rec go {n} (t : Input n) : Success n possibly (List α) :=
+    let rec go {n} (t : Input σ τ n) : Success n possibly (List α) :=
       match p.run t with
       | .failure _ => { result := [], restSize := n }
       | .success r =>
@@ -701,23 +706,23 @@ def many (p : Parser ε ⟨ge, always⟩ α) : Parser ε flexible (List α) wher
     fun t => success (go t)
 
 /-- Apply `p` one or more times, collecting results. -/
-def many1 (p : Parser ε ⟨ge, always⟩ α) : Parser ε ⟨ge, always⟩ (NonEmptyList α) := gdo
+def many1 (p : Parser σ τ ε ⟨ge, always⟩ α) : Parser σ τ ε ⟨ge, always⟩ (NonEmptyList α) := gdo
   let x ← p
   let xs ← many p
   return x ::₁ xs
   grade_by by simp
 
 /-- Apply `p` zero or more times, discarding results. -/
-def skipMany (p : Parser ε ⟨ge, always⟩ α) : Parser ε flexible PUnit :=
+def skipMany (p : Parser σ τ ε ⟨ge, always⟩ α) : Parser σ τ ε flexible PUnit :=
   () <$ᵍ many p
 
 /-- Apply `p` one or more times, discarding results. -/
-def skipMany1 (p : Parser ε ⟨ge, always⟩ α) : Parser ε ⟨ge, always⟩ PUnit :=
+def skipMany1 (p : Parser σ τ ε ⟨ge, always⟩ α) : Parser σ τ ε ⟨ge, always⟩ PUnit :=
   () <$ᵍ many1 p
 
 /-- Parse `p` surrounded by the delimiters `l` and `r`. -/
-def rawBracket (l r : Parser Error conditional PUnit) (p : Parser Error ⟨ge, gc⟩ α)
-  : Parser Error ⟨ge ⊔ possibly, always⟩ α := gdo
+def rawBracket (l r : Parser σ τ Error conditional PUnit) (p : Parser σ τ Error ⟨ge, gc⟩ α)
+  : Parser σ τ Error ⟨ge ⊔ possibly, always⟩ α := gdo
   l
   let x ← p
   r
@@ -726,19 +731,19 @@ def rawBracket (l r : Parser Error conditional PUnit) (p : Parser Error ⟨ge, g
 
 /-- Parse `sep` then `p`, returning `p`'s result; always consumes. -/
 private def sepItem
-  (sep : Parser ε ⟨ge', gc'⟩ β)
-  (p : Parser ε ⟨ge, gc⟩ α)
+  (sep : Parser σ τ ε ⟨ge', gc'⟩ β)
+  (p : Parser σ τ ε ⟨ge, gc⟩ α)
   (h : gc' ⊔ gc = always := by simp)
-  : Parser ε ⟨ge' ⊔ ge, always⟩ α := gdo
+  : Parser σ τ ε ⟨ge' ⊔ ge, always⟩ α := gdo
   let _ ← sep; p
   grade_by by simp [h]
 
 /-- Parse zero or more occurrences of `p` separated by `sep`. -/
 def sepBy
-  (sep : Parser ε ⟨ge', gc'⟩ β)
-  (p : Parser ε ⟨ge, gc⟩ α)
+  (sep : Parser σ τ ε ⟨ge', gc'⟩ β)
+  (p : Parser σ τ ε ⟨ge, gc⟩ α)
   (h : gc' ⊔ gc = always := by simp)
-  : Parser ε flexible (List α) := gdo
+  : Parser σ τ ε flexible (List α) := gdo
   let m ← optional p
   (match m with
    | .some f => gdo
@@ -752,10 +757,10 @@ def sepBy
 
 /-- Parse one or more occurrences of `p` separated by `sep`. -/
 def sepBy1
-  (sep : Parser ε ⟨ge', gc'⟩ β)
-  (p : Parser ε ⟨ge, gc⟩ α)
+  (sep : Parser σ τ ε ⟨ge', gc'⟩ β)
+  (p : Parser σ τ ε ⟨ge, gc⟩ α)
   (h : gc' ⊔ gc = always := by simp)
-  : Parser ε ⟨ge, gc ⊔ possibly⟩ (NonEmptyList α) := gdo
+  : Parser σ τ ε ⟨ge, gc ⊔ possibly⟩ (NonEmptyList α) := gdo
   let first ← p
   let rest ← many (sepItem sep p h)
   return first ::₁ rest
@@ -763,36 +768,36 @@ def sepBy1
 
 /-- Parse `p` then `sep`, returning `p`'s result; always consumes. -/
 private def endItem
-  (sep : Parser ε ⟨ge', gc'⟩ β)
-  (p : Parser ε ⟨ge, gc⟩ α)
+  (sep : Parser σ τ ε ⟨ge', gc'⟩ β)
+  (p : Parser σ τ ε ⟨ge, gc⟩ α)
   (h : gc ⊔ gc' = always := by simp)
-  : Parser ε ⟨ge ⊔ ge', always⟩ α := gdo
+  : Parser σ τ ε ⟨ge ⊔ ge', always⟩ α := gdo
   let x ← p; let _ ← sep; return x
   grade_by by simp [h]
 
 /-- Parse zero or more occurrences of `p`, each followed by `sep`. -/
 def endBy
-  (sep : Parser ε ⟨ge', gc'⟩ β)
-  (p : Parser ε ⟨ge, gc⟩ α)
+  (sep : Parser σ τ ε ⟨ge', gc'⟩ β)
+  (p : Parser σ τ ε ⟨ge, gc⟩ α)
   (h : gc ⊔ gc' = always := by simp)
-  : Parser ε flexible (List α) :=
+  : Parser σ τ ε flexible (List α) :=
   many (endItem sep p h)
 
 /-- Parse one or more occurrences of `p`, each followed by `sep`. -/
 def endBy1
-  (sep : Parser ε ⟨ge', gc'⟩ β)
-  (p : Parser ε ⟨ge, gc⟩ α)
+  (sep : Parser σ τ ε ⟨ge', gc'⟩ β)
+  (p : Parser σ τ ε ⟨ge, gc⟩ α)
   (h : gc ⊔ gc' = always := by simp)
-  : Parser ε ⟨ge ⊔ ge', always⟩ (NonEmptyList α) :=
+  : Parser σ τ ε ⟨ge ⊔ ge', always⟩ (NonEmptyList α) :=
   many1 (endItem sep p h)
 
 /-- Parse one or more occurrences of `p` separated by `sep`, with an optional
 trailing `sep`. -/
 def sepEndBy1
-  (sep : Parser ε ⟨ge', gc'⟩ β)
-  (p : Parser ε ⟨ge, gc⟩ α)
+  (sep : Parser σ τ ε ⟨ge', gc'⟩ β)
+  (p : Parser σ τ ε ⟨ge, gc⟩ α)
   (h : gc' ⊔ gc = always := by simp)
-  : Parser ε ⟨ge, gc ⊔ possibly⟩ (NonEmptyList α) := gdo
+  : Parser σ τ ε ⟨ge, gc ⊔ possibly⟩ (NonEmptyList α) := gdo
   let xs ← sepBy1 sep p (h := h)
   weakenConsumes (skipOptional sep)
   return xs
@@ -801,10 +806,10 @@ def sepEndBy1
 /-- Parse zero or more occurrences of `p` separated by `sep`, with an optional
 trailing `sep`. -/
 def sepEndBy
-  (sep : Parser ε ⟨ge', gc'⟩ β)
-  (p : Parser ε ⟨ge, gc⟩ α)
+  (sep : Parser σ τ ε ⟨ge', gc'⟩ β)
+  (p : Parser σ τ ε ⟨ge, gc⟩ α)
   (h : gc' ⊔ gc = always := by simp)
-  : Parser ε flexible (List α) := gdo
+  : Parser σ τ ε flexible (List α) := gdo
   let xs ← sepBy sep p (h := h)
   weakenConsumes (skipOptional sep)
   return xs
@@ -812,8 +817,8 @@ def sepEndBy
 /-- Parse exactly `n + 1` occurrences of `p`. -/
 def count1
   (n : Nat)
-  (p : Parser ε ⟨ge, gc⟩ α)
-  : Parser ε ⟨ge, gc⟩ (List.Vector α (n + 1)) :=
+  (p : Parser σ τ ε ⟨ge, gc⟩ α)
+  : Parser σ τ ε ⟨ge, gc⟩ (List.Vector α (n + 1)) :=
   match n with
   | 0 => (· ::ᵥ .nil) <$>ᵍ p
   | n + 1 => gdo
@@ -825,19 +830,19 @@ def count1
 /-- Parse exactly `n` occurrences of `p`. -/
 def count
   (n : Nat)
-  (p : Parser ε ⟨ge, gc⟩ α)
-  : Parser ε ⟨ge ⊓ possibly, gc ⊓ possibly⟩ (List.Vector α n) :=
+  (p : Parser σ τ ε ⟨ge, gc⟩ α)
+  : Parser σ τ ε ⟨ge ⊓ possibly, gc ⊓ possibly⟩ (List.Vector α n) :=
   match n with
   | 0 => ok .nil
   | n + 1 => count1 n p |>.relax
 
 /-- Skip exactly `n` occurrences of `p`. -/
-def skip (n : Nat) (p : Parser ε ⟨ge, gc⟩ α)
-  : Parser ε ⟨ge ⊓ possibly, gc ⊓ possibly⟩ PUnit :=
+def skip (n : Nat) (p : Parser σ τ ε ⟨ge, gc⟩ α)
+  : Parser σ τ ε ⟨ge ⊓ possibly, gc ⊓ possibly⟩ PUnit :=
   () <$ᵍ count n p
 
 /-- Skip up to `n` occurrences of `p`. -/
-def skipUpTo : (n : Nat) → Parser ε ⟨ge, always⟩ α → Parser ε flexible PUnit
+def skipUpTo : (n : Nat) → Parser σ τ ε ⟨ge, always⟩ α → Parser σ τ ε flexible PUnit
   | 0, _ => ok ()
   | n + 1, p => gdo
     let m ← weakenConsumes (optional p)
@@ -846,24 +851,24 @@ def skipUpTo : (n : Nat) → Parser ε ⟨ge, always⟩ α → Parser ε flexibl
      | .some _ => skipUpTo n p)
 
 /-- Skip `n` or more occurrences of `p`. -/
-def skipManyN (n : Nat) (p : Parser ε ⟨ge, always⟩ α)
-  : Parser ε ⟨ge ⊓ possibly, possibly⟩ PUnit := gdo
+def skipManyN (n : Nat) (p : Parser σ τ ε ⟨ge, always⟩ α)
+  : Parser σ τ ε ⟨ge ⊓ possibly, possibly⟩ PUnit := gdo
   skip n p
   skipMany p
   grade_by by simp
 
 /-- Run `p` until `stop` succeeds; discard `p`'s results. -/
 def skipUntil [ParserError ε]
-  (stop : Parser ε ⟨ge', always⟩ β)
-  (p : Parser ε ⟨ge, always⟩ α)
-  : Parser ε ⟨ge, always⟩ PUnit :=
+  (stop : Parser σ τ ε ⟨ge', always⟩ β)
+  (p : Parser σ τ ε ⟨ge, always⟩ α)
+  : Parser σ τ ε ⟨ge, always⟩ PUnit :=
   () <$ᵍ manyTill p stop
 
 /-- Parse exactly `n` occurrences of `p` separated by `sep`. -/
 def sepByN
-  (sep : Parser ε ⟨ge', gc'⟩ β)
-  (p : Parser ε ⟨ge, gc⟩ α)
-  : (n : Nat) → Parser ε fallible (List.Vector α n)
+  (sep : Parser σ τ ε ⟨ge', gc'⟩ β)
+  (p : Parser σ τ ε ⟨ge, gc⟩ α)
+  : (n : Nat) → Parser σ τ ε fallible (List.Vector α n)
   | 0 => ok .nil
   | n + 1 => (gdo
     let sepP := gdo
@@ -874,9 +879,9 @@ def sepByN
 
 /-- Parse one or more occurrences of `p` separated by left-associative operator `op`. -/
 def chainl1
-  (op : Parser ε ⟨ge', always⟩ (α → α → α))
-  (p : Parser ε ⟨ge, always⟩ α)
-  : Parser ε ⟨ge, always⟩ α := gdo
+  (op : Parser σ τ ε ⟨ge', always⟩ (α → α → α))
+  (p : Parser σ τ ε ⟨ge, always⟩ α)
+  : Parser σ τ ε ⟨ge, always⟩ α := gdo
   let x ← p
   let rest ← many (gdo
     let f ← op
@@ -886,23 +891,23 @@ def chainl1
   grade_by by simp
 
 /-- Succeed only at end of input, consuming nothing. -/
-def eof : Parser Error lookahead PUnit where
+def eof : Parser σ τ Error lookahead PUnit where
   run {n} t := match n with
     | .zero => ok () |>.run t
     | _ => throw Error.fail |>.run t
 
 /-- Run `p` without consuming input, keeping only the result. -/
-def lookahead (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge, never⟩ α :=
+def lookahead (p : Parser σ τ Error ⟨ge, gc⟩ α) : Parser σ τ Error ⟨ge, never⟩ α :=
   p.handle
     (onSuccess := fun {n} _ h r => success { result := r.result, restSize := n })
     (soundSuccess := fun h _ => h)
     (onError := fun _ h f => failure f)
     (soundError := fun h _ => h)
 
-def peek : Parser Error Grade.lookahead Char := lookahead anyChar
+def peek : Parser σ τ Error Grade.lookahead τ := lookahead anyTok
 
 /-- Succeed (without consuming) only when `p` fails. -/
-def notFollowedBy (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge.complement, never⟩ PUnit :=
+def notFollowedBy (p : Parser σ τ Error ⟨ge, gc⟩ α) : Parser σ τ Error ⟨ge.complement, never⟩ PUnit :=
   p.handle
     (onSuccess := fun _ h _ => Outcome.throw Error.fail)
     (soundSuccess := fun h _ => Necessity.le_compl h)
@@ -912,9 +917,9 @@ def notFollowedBy (p : Parser Error ⟨ge, gc⟩ α) : Parser Error ⟨ge.comple
 /-- Run `p`; if it fails with error `e`, run `recover e`. If recovery also
 fails, report `p`'s original error. -/
 def withRecovery
-  (recover : ε' → Parser ε ⟨ge, gc⟩ α)
-  (p : Parser ε' ⟨ge', gc'⟩ α)
-  : Parser ε' ⟨ge ⊓ ge', ge'.ite gc gc'⟩ α :=
+  (recover : ε' → Parser σ τ ε ⟨ge, gc⟩ α)
+  (p : Parser σ τ ε' ⟨ge', gc'⟩ α)
+  : Parser σ τ ε' ⟨ge ⊓ ge', ge'.ite gc gc'⟩ α :=
   p.handle
     (onSuccess := fun _ h r => success
       { r with witness := consumptionWitness.ite_left h r.witness })

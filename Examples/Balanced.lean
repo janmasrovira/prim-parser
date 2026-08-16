@@ -1,17 +1,17 @@
 import PrimParser
 
-open Parser
+open Parser Parser.Char
 
 namespace Balanced
 
-def group : Parser Error conditional PUnit :=
+def group : StringParser conditional PUnit :=
   fix (fun rec => gdo
     char '('
     skipMany rec
     char ')')
 
 /-- A sequence of balanced groups followed by end-of-input, e.g. `()()`, `()(())`. -/
-def balanced : Parser Error fallible PUnit := gdo
+def balanced : StringParser fallible PUnit := gdo
   skipMany group
   eof
 
