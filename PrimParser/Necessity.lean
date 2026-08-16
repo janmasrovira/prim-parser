@@ -12,17 +12,19 @@ export Necessity (possibly always never)
 
 namespace Necessity
 
-instance : Max Necessity where
-  max a b := match a, b with
-    | always, _ => always
-    | possibly, never => possibly
-    | _, _ => b
+@[noinline, reducible] def max : Necessity → Necessity → Necessity
+  | always, _ => always
+  | possibly, never => possibly
+  | _, b => b
 
-instance : Min Necessity where
-  min a b := match a, b with
-    | never, _ => never
-    | possibly, always => possibly
-    | _, _ => b
+@[noinline, reducible] def min : Necessity → Necessity → Necessity
+  | never, _ => never
+  | possibly, always => possibly
+  | _, b => b
+
+instance : Max Necessity where max := Necessity.max
+
+instance : Min Necessity where min := Necessity.min
 
 instance : LinearOrder Necessity := by
   let toFin : Necessity → Fin 3
@@ -40,19 +42,19 @@ instance : BoundedOrder Necessity where
   bot_le a := by cases a <;> decide
 
 instance : SemilatticeSup Necessity where
-  sup := max
+  sup := Necessity.max
   sup_le a b c := by cases a <;> cases b <;> cases c <;> decide
   le_sup_left a b := by cases a <;> cases b <;> decide
   le_sup_right a b := by cases a <;> cases b <;> decide
 
 instance : SemilatticeInf Necessity where
-  inf := min
+  inf := Necessity.min
   le_inf a b c := by cases a <;> cases b <;> cases c <;> decide
   inf_le_left a b := by cases a <;> cases b <;> decide
   inf_le_right a b := by cases a <;> cases b <;> decide
 
 instance : Monoid Necessity where
-  mul := max
+  mul := Necessity.max
   mul_assoc a b c := by cases a <;> cases b <;> cases c <;> decide
   one := never
   one_mul a := by cases a <;> decide
