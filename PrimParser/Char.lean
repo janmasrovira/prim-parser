@@ -15,7 +15,7 @@ variable
 
 /-- Run a parser on a `String`. -/
 def runParser (p : Parser ε g α) (s : String) : Except ε α :=
-  p.runOn (Text.ofString s)
+  p.runOn (Input.ofString s)
 
 theorem runParser_sound (p : Parser ε g α) (s : String)
   : Except.Sound g.errors (p.runParser s) :=
@@ -114,9 +114,9 @@ def skipWhile1 (f : Char → Bool) : Parser Error conditional PUnit :=
 
 theorem many_go_satisfy_restSize
   (f : Char → Bool)
-  (t : Text n)
-  : (many.go (satisfy f) t).restSize = (Text.skipWhile f t).val := by
-  fun_induction Text.skipWhile f t <;> rw [many.go]
+  (t : Input n)
+  : (many.go (satisfy f) t).restSize = (Input.skipWhile f t).val := by
+  fun_induction Input.skipWhile f t <;> rw [many.go]
   case case1 => rw [satisfy_run_accept]; assumption
   case case2 => simp_all [satisfy_run_reject]
   case case3 => simp_all [satisfy_run_eof]
@@ -132,21 +132,21 @@ private theorem ofList_eq_foldl (l : List Char) : String.ofList l = l.foldl Stri
     simp only [List.foldl_cons, ih, String.push_eq_append, String.ofList_cons,
                String.append_assoc]
 
-private theorem takeWhile_go_eq (f : Char → Bool) (t : Text n) (acc : String)
-  : Text.takeWhile.go f t acc = (many.go (satisfy f) t).result.foldl String.push acc := by
-  fun_induction Text.takeWhile.go f t acc <;> rw [many.go]
+private theorem takeWhile_go_eq (f : Char → Bool) (t : Input n) (acc : String)
+  : Input.takeWhile.go f t acc = (many.go (satisfy f) t).result.foldl String.push acc := by
+  fun_induction Input.takeWhile.go f t acc <;> rw [many.go]
   case case1 => rw [satisfy_run_accept]; simp_all
   case case2 => simp_all [satisfy_run_reject]
   case case3 => simp_all [satisfy_run_eof]
 
-theorem many_go_satisfy_result (f : Char → Bool) (t : Text n)
-  : String.ofList (many.go (satisfy f) t).result = Text.takeWhile f t := by
-  rw [ofList_eq_foldl, Text.takeWhile, takeWhile_go_eq]
+theorem many_go_satisfy_result (f : Char → Bool) (t : Input n)
+  : String.ofList (many.go (satisfy f) t).result = Input.takeWhile f t := by
+  rw [ofList_eq_foldl, Input.takeWhile, takeWhile_go_eq]
 
 @[csimp] private theorem takeWhile_eq_impl : @takeWhile = @takeWhileImpl := by
   funext f
   simp only [takeWhile, takeWhileImpl, many, GradedFunctor.gmap, Functor.map,
-             many_go_satisfy_result, many_go_satisfy_restSize, Text.val_skipWhile]
+             many_go_satisfy_result, many_go_satisfy_restSize, Input.val_skipWhile]
 
 @[csimp] private theorem skipWhile_eq_impl : @skipWhile = @skipWhileImpl := by
   funext f
@@ -160,15 +160,15 @@ private theorem many1_satisfy_eq (f : Char → Bool)
 
 section
 
-variable {f : Char → Bool} {c : Char} {t : Text n}
+variable {f : Char → Bool} {c : Char} {t : Input n}
 
 theorem takeWhile1_run_accept
   (h : t.nextChar = some c := by assumption)
   (hf : f c := by assumption)
   : (takeWhile1 f).run t
-    = success { result := Text.takeWhile f t
-                restSize := (Text.skipWhile f t).val
-                witness := Text.skipWhile_lt_iff.mpr ⟨c, h, hf⟩ } := by
+    = success { result := Input.takeWhile f t
+                restSize := (Input.skipWhile f t).val
+                witness := Input.skipWhile_lt_iff.mpr ⟨c, h, hf⟩ } := by
   have := t.utf8Size_le h
   have := Char.utf8Size_pos c
   have hres : (many.go (satisfy f) t).result
@@ -195,12 +195,12 @@ end
 
 @[csimp] private theorem takeWhile1_eq_impl : @takeWhile1 = @takeWhile1Impl := by
   ext f n t
-  simp only [takeWhile1Impl, Text.utf8ByteSize_takeWhile_pos_iff]
+  simp only [takeWhile1Impl, Input.utf8ByteSize_takeWhile_pos_iff]
   repeat1' split
   next => exact takeWhile1_run_failure satisfy_run_eof
   next haccepts =>
     obtain ⟨c, hd, hf⟩ := haccepts
-    simp only [takeWhile1_run_accept hd hf, Text.val_skipWhile]
+    simp only [takeWhile1_run_accept hd hf, Input.val_skipWhile]
   next hrejects c hd =>
     have : ¬ f c := fun hf => hrejects ⟨c, hd, hf⟩
     exact takeWhile1_run_failure satisfy_run_reject
@@ -208,15 +208,15 @@ end
 
 section
 
-variable {f : Char → Bool} {c : Char} {t : Text n}
+variable {f : Char → Bool} {c : Char} {t : Input n}
 
 theorem skipWhile1_run_accept
   (h : t.nextChar = some c)
   (hf : f c)
   : (skipWhile1 f).run t
     = success { result := ()
-                restSize := (Text.skipWhile f t).val
-                witness := Text.skipWhile_lt_iff.mpr ⟨c, h, hf⟩ } := by
+                restSize := (Input.skipWhile f t).val
+                witness := Input.skipWhile_lt_iff.mpr ⟨c, h, hf⟩ } := by
   simp only [skipWhile1, gconst, GradedFunctor.gmap, Functor.map, takeWhile1_run_accept h hf]
 
 /-- `skipWhile1` fails exactly as `takeWhile1` does. -/
@@ -229,7 +229,7 @@ end
 
 @[csimp] private theorem skipWhile1_eq_impl : @skipWhile1 = @skipWhile1Impl := by
   ext f n t
-  simp only [skipWhile1Impl, Text.skipWhile_lt_iff]
+  simp only [skipWhile1Impl, Input.skipWhile_lt_iff]
   repeat1' split
   next => exact skipWhile1_run_failure satisfy_run_eof
   next haccepts =>

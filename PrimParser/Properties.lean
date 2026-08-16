@@ -38,7 +38,7 @@ theorem heq
   {p : Parser ε g1 α}
   {q : Parser ε g2 α}
   (hg : g1 = g2)
-  (h : ∀ {m} (t : Text m), p.run t ≍ q.run t)
+  (h : ∀ {m} (t : Input m), p.run t ≍ q.run t)
   : p ≍ q := by
   subst hg; apply heq_of_eq; ext m t; exact eq_of_heq (h t)
 
@@ -94,7 +94,7 @@ theorem Outcome.success_congr
 theorem bind_run
   (m : Parser ε g α)
   (f : α → Parser ε g' β)
-  (t : Text n)
+  (t : Input n)
   : (bind m f).run t
       = match m.run t with
         | failure e => failure e
@@ -117,7 +117,7 @@ theorem gpure_gbind
   : (gpure a >>=ᵍ f) ≍ f a := by
   apply Parser.heq (one_mul j)
   intro m t
-  simp only [gbind, gpure, bind_run, Text.dropTo_self]
+  simp only [gbind, gpure, bind_run, Input.dropTo_self]
   cases f a |>.run t with
   | failure e => rfl
   | success y => cases y; rfl
@@ -150,7 +150,7 @@ theorem gbind_assoc
     cases f a.result |>.run (t.dropTo a.restSize a.le) with
     | failure e => exact Outcome.failure_congr hc
     | success b =>
-      simp only [Success.seq_result, Success.seq_restSize, Text.dropTo_trans]
+      simp only [Success.seq_result, Success.seq_restSize, Input.dropTo_trans]
       cases g b.result |>.run (t.dropTo b.restSize (b.le.trans a.le)) with
       | failure e => exact Outcome.failure_congr hc
       | success c => exact Outcome.success_congr hc Success.seq_assoc
@@ -171,7 +171,7 @@ theorem gpure_gseq
   intro m t
   obtain ⟨xr, xs⟩ := x
   simp only [GradedApplicative.gseq, GradedFunctor.gmap, gpure, bind_run, Functor.map,
-             Text.dropTo_self]
+             Input.dropTo_self]
   exact match xr t with
   | failure e => Outcome.failure_congr hc
   | success y => Outcome.success_congr hc (Success.heq hc)

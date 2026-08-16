@@ -10,8 +10,8 @@ import Examples.Csv
 
 open Parser
 
-/-- Build a length-indexed `Text` from a `String`. -/
-def toText (s : String) : Text s.toUTF8.size := Text.ofString s
+/-- Build a length-indexed `Input` from a `String`. -/
+def toInput (s : String) : Input s.toUTF8.size := Input.ofString s
 
 /-- `[0, 1, 2, ..., n-1]` as JSON. -/
 def genJson (n : Nat) : String :=
@@ -33,7 +33,7 @@ def loop (iters : Nat) (body : Unit → Nat) : Nat :=
   (List.range iters).foldl (fun acc _ => acc + body ()) 0
 
 def benchJson (size iters : Nat) : Nat :=
-  let t := toText (genJson size)
+  let t := toInput (genJson size)
   loop iters fun _ =>
     match Json.json.run t with
     | Parser.success r => match r.result with
@@ -42,14 +42,14 @@ def benchJson (size iters : Nat) : Nat :=
     | Parser.failure _ => 0
 
 def benchArith (size iters : Nat) : Nat :=
-  let t := toText (genArith size)
+  let t := toInput (genArith size)
   loop iters fun _ =>
     match Expr.expr.run t with
     | Parser.success r => (Expr.eval r.result).toNat
     | Parser.failure _ => 0
 
 def benchCsv (size iters : Nat) : Nat :=
-  let t := toText (genCsv size)
+  let t := toInput (genCsv size)
   loop iters fun _ =>
     match Csv.table.run t with
     | Parser.success r => r.result.fst
