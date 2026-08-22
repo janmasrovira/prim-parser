@@ -609,9 +609,9 @@ def ok (a : α) (he : ge ≤ possibly := by simp) (hc : gc ≤ possibly := by si
 /-- Consume a character and apply `f`; succeed with the result or fail if `f` returns `none`. -/
 def token (f : Char → Option α) : Parser Error conditional α := gdo
   let c ← anyChar
-  match f c with
-  | .some r => ok (gc := never) r
-  | .none => throw (ge := possibly) Error.fail
+  (match f c with
+   | .some r => ok (gc := never) r
+   | .none => throw (ge := possibly) Error.fail)
 
 /-- Consume a character that satisfies predicate `f`, or fail. -/
 def satisfy (f : Char → Bool) : Parser Error conditional Char :=
@@ -691,6 +691,10 @@ def optional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement
 def optionalD (p : Parser ε ⟨ge, gc⟩ α) (d : α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ α :=
   (·.getD d) <$>ᵍ optional p
 
+/-- Try `p`, discarding the result; never fails. -/
+def skipOptional (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ PUnit :=
+  () <$ᵍ optional p
+
 /-- Try `p`; report whether it succeeded, never failing itself. -/
 def test (p : Parser ε ⟨ge, gc⟩ α) : Parser ε ⟨never, ge.complement ⊓ gc⟩ Bool :=
   Option.isSome <$>ᵍ optional p
@@ -707,7 +711,7 @@ def manyTill [ParserError ε]
       fix fun self =>
         oneOf (
           ([] <$ᵍ e |>.weakenErrors) ::₁
-          [gdo let a ← p; let as ← self; return (a :: as); grade_by by simp]
+          [gdo let a ← p; let as ← self; return (a :: as)]
         )
 
 /-- Apply `p` zero or more times, collecting results. Requires `p` to always consume. -/
@@ -988,7 +992,6 @@ def int : Parser Error conditional Int := gdo
   let neg ← optional (char '-')
   let n ← nat
   return if neg.isSome then -n else n
-  grade_by by simp
 
 def space : Parser Error conditional PUnit := skipSatisfy (· == ' ')
 
@@ -1061,9 +1064,8 @@ end ASCII
 
 /-- Match a line terminator: LF or CRLF. -/
 def eol : Parser Error conditional PUnit := gdo
-  optional ASCII.cr
+  skipOptional ASCII.cr
   ASCII.lf
-  grade_by by simp
 
 /-- Parse `sep` then `p`, returning `p`'s result; always consumes. -/
 private def sepItem
@@ -1071,7 +1073,7 @@ private def sepItem
   (p : Parser ε ⟨ge, gc⟩ α)
   (h : gc' ⊔ gc = always := by simp)
   : Parser ε ⟨ge' ⊔ ge, always⟩ α := gdo
-  sep; p
+  let _ ← sep; p
   grade_by by simp [h]
 
 /-- Parse zero or more occurrences of `p` separated by `sep`. -/
@@ -1081,11 +1083,11 @@ def sepBy
   (h : gc' ⊔ gc = always := by simp)
   : Parser ε flexible (List α) := gdo
   let m ← optional p
-  match m with
-  | .some f =>
-    let rest ← many (sepItem sep p h)
-    ok (gc := possibly) (f :: rest)
-  | .none => ok (ge := never) []
+  (match m with
+   | .some f => gdo
+     let rest ← many (sepItem sep p h)
+     ok (gc := possibly) (f :: rest)
+   | .none => ok (ge := never) [])
   grade_by by
     simp
     cases ge <;> cases gc <;> simp
@@ -1108,7 +1110,7 @@ private def endItem
   (p : Parser ε ⟨ge, gc⟩ α)
   (h : gc ⊔ gc' = always := by simp)
   : Parser ε ⟨ge ⊔ ge', always⟩ α := gdo
-  let x ← p; sep; return x
+  let x ← p; let _ ← sep; return x
   grade_by by simp [h]
 
 /-- Parse zero or more occurrences of `p`, each followed by `sep`. -/
@@ -1135,7 +1137,7 @@ def sepEndBy1
   (h : gc' ⊔ gc = always := by simp)
   : Parser ε ⟨ge, gc ⊔ possibly⟩ (NonEmptyList α) := gdo
   let xs ← sepBy1 sep p (h := h)
-  weakenConsumes (optional sep)
+  weakenConsumes (skipOptional sep)
   return xs
   grade_by by simp
 
@@ -1147,9 +1149,8 @@ def sepEndBy
   (h : gc' ⊔ gc = always := by simp)
   : Parser ε flexible (List α) := gdo
   let xs ← sepBy sep p (h := h)
-  weakenConsumes (optional sep)
+  weakenConsumes (skipOptional sep)
   return xs
-  grade_by by simp
 
 /-- Parse exactly `n + 1` occurrences of `p`. -/
 def count1
@@ -1178,15 +1179,14 @@ def skip (n : Nat) (p : Parser ε ⟨ge, gc⟩ α)
   : Parser ε ⟨ge ⊓ possibly, gc ⊓ possibly⟩ PUnit :=
   () <$ᵍ count n p
 
-/-- Skip up to `n` occurrences of `p`; never fails. -/
+/-- Skip up to `n` occurrences of `p`. -/
 def skipUpTo : (n : Nat) → Parser ε ⟨ge, always⟩ α → Parser ε flexible PUnit
   | 0, _ => ok ()
   | n + 1, p => gdo
     let m ← weakenConsumes (optional p)
-    match m with
-    | .none => ok (ge := never) ()
-    | .some _ => skipUpTo n p
-    grade_by by simp
+    (match m with
+     | .none => ok (ge := never) ()
+     | .some _ => skipUpTo n p)
 
 /-- Skip `n` or more occurrences of `p`. -/
 def skipManyN (n : Nat) (p : Parser ε ⟨ge, always⟩ α)
@@ -1209,9 +1209,8 @@ def sepByN
   : (n : Nat) → Parser ε fallible (List.Vector α n)
   | 0 => ok .nil
   | n + 1 => (gdo
-    let sepP : Parser ε ⟨ge' ⊔ ge, gc' ⊔ gc⟩ α := gdo
-      sep; p
-      grade_by by simp
+    let sepP := gdo
+      let _ ← sep; p
     let p1 ← p
     let ps ← count n sepP
     return (p1 ::ᵥ ps)) |>.weaken

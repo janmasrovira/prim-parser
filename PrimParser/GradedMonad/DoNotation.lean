@@ -1,94 +1,68 @@
+import Lean
 import PrimParser.GradedMonad.Basic
 
 /-!
 # Graded Do-Notation
 
-Provides `gdo` blocks that desugar into `gbind`/`gpure` calls, mirroring
+Provides a `gdo` block that desugars into `gbind`/`gpure` calls, mirroring
 Lean's built-in `do` notation for graded monads. An optional trailing
 `grade_by` element supplies a proof that the computed grade equals the
 expected one.
 -/
 
+open Lean Elab Term Meta Lean.Elab.Do Lean.Parser.Term
+
+namespace GradedDo
+
+syntax (name := gdoElab) "gdo " doSeq : term
+
+private def gradedOps (lctx : LocalContext) (insts : LocalInstances) (G M : Expr) : DoOps where
+  mkMonadApp α : DoElabM Expr :=
+    return mkApp2 M (← mkFreshExprMVarAt lctx insts G) α
+
+  mkPureApp α e : DoElabM Expr :=
+    mkAppOptM ``GradedApplicative.gpure #[none, none, none, M, none, α, e]
+
+  mkBindApp _α _β e k : DoElabM Expr :=
+    mkAppM ``GradedMonad.gbind #[e, k]
+
+  isPureApp? e : Option Expr :=
+    if e.isAppOfArity ``GradedApplicative.gpure 7 then some e.appArg! else none
+
+  splitMonadApp? type : TermElabM (Option (MonadInfo × Expr)) := do
+    let .app m resultType := type.consumeMData | return none
+    return some ({ m, u := .zero, v := .zero }, resultType)
+
+@[term_elab gdoElab] def elabGDo : TermElab := fun stx expectedType? => do
+  let `(gdo $doSeq) := stx | throwUnsupportedSyntax
+  tryPostponeIfNoneOrMVar expectedType?
+  match ← expectedType?.mapM instantiateMVars with
+  | some (.app (.app M i) _α) =>
+    elabDoWith (gradedOps (← getLCtx) (← getLocalInstances) (← inferType i) M) doSeq expectedType?
+  | _ => -- Unknown expected type
+    let G ← mkFreshExprMVar (mkSort Level.one)
+    let M ← mkFreshExprMVar (← mkAppM ``GradedType #[G])
+    let ty := mkApp2 M (← mkFreshExprMVar G) (← mkFreshExprMVar (mkSort Level.one))
+    elabDoWith (gradedOps (← getLCtx) (← getLocalInstances) G M) doSeq ty
+
+syntax (name := gradeBy) "grade_by " term : doElem
+
+/-- `gcast h (gdo items)` -/
+private def mkGradeCast (items : TSyntaxArray ``doSeqItem) (h : Term) : MacroM Term := do
+  if items.isEmpty then
+    Macro.throwError "`gdo` block containing only `grade_by`"
+  `(gcast $h (gdo $items:doSeqItem*))
+
+macro_rules
+  | `(gdo $items:doSeqItem* grade_by $h) => mkGradeCast items h
+  | `(gdo { $items:doSeqItem* grade_by $h }) => mkGradeCast items h
+
+end GradedDo
+
+section Examples
+
 variable
   {G : Type} [Monoid G]
-
-syntax "grade_by " term : doElem
-
-syntax (name := gdoNotation) "gdo " doSeq : term
-
-open Lean in
-private partial def expandGDoBlock (doSeq : Syntax) : MacroM (TSyntax `term) := do
-  let itemsNode := if doSeq.getKind == ``Lean.Parser.Term.doSeqIndent then
-    doSeq[0]
-  else
-    doSeq[1]
-  let elems := (itemsNode.getArgs.map fun item => item[0]).filter (!·.isMissing)
-  if elems.isEmpty then
-    Macro.throwError "empty gdo block"
-  let (mainElems, castProof) ← do
-    match elems.back! with
-    | `(doElem| grade_by $proof:term) => pure (elems.pop, some proof)
-    | _ => pure (elems, none)
-  if mainElems.isEmpty then
-    Macro.throwError "empty gdo block (only grade_by)"
-  let last := mainElems.back!
-  let init := mainElems.pop
-  let r ← expandGDoFinal last
-  let mut result := r
-  for i in List.range init.size |>.reverse do
-    result ← expandGDoElem init[i]! result
-  match castProof with
-  | some proof => `(gcast $proof $result)
-  | none => return result
-where
-  expandGDoElem (elem : Syntax) (rest : TSyntax `term) : MacroM (TSyntax `term) :=
-    match elem with
-    | `(doElem| let $x:ident ← $e:term) => `(GradedMonad.gbind $e fun $x => $rest)
-    | `(doElem| let _ ← $e:term) => `(GradedMonad.gbind $e fun _ => $rest)
-    | `(doElem| let $x:ident : $ty:term ← $e:term) => `(GradedMonad.gbind $e fun ($x : $ty) => $rest)
-    | `(doElem| let $x:ident := $e:term) => `(let $x := $e; $rest)
-    | `(doElem| let $x:ident : $ty:term := $e:term) => `(let $x : $ty := $e; $rest)
-    | _ =>
-      if elem.isOfKind ``Lean.Parser.Term.doMatch then do
-        let matchTerm ← expandDoMatch elem
-        `(GradedMonad.gbind $matchTerm fun _ => $rest)
-      else
-        let e : TSyntax `term := ⟨elem.getArgs.back!⟩
-        `(GradedMonad.gbind $e fun _ => $rest)
-  expandGDoFinal (elem : Syntax) : MacroM (TSyntax `term) := do
-    match elem with
-    | `(doElem| return $e:term) => `(GradedApplicative.gpure $e)
-    | `(doElem| return) => `(GradedApplicative.gpure ())
-    | _ =>
-      if elem.isOfKind ``Lean.Parser.Term.doMatch then
-        expandDoMatch elem
-      else
-        pure ⟨elem.getArgs.back!⟩
-  expandDoMatch (node : Syntax) : MacroM (TSyntax `term) := do
-    let processed ← replaceDoSeqs node
-    let args := processed.getArgs
-    let some withIdx := args.findIdx? (· matches .atom _ "with")
-      | Macro.throwErrorAt node "malformed match in gdo block"
-    let discrs := args[withIdx - 1]!
-    let alts := args[withIdx + 1]!
-    return ⟨.node (SourceInfo.none) ``Lean.Parser.Term.match
-      #[args[0]!, mkNullNode, mkNullNode, discrs, args[withIdx]!, alts]⟩
-  replaceDoSeqs (node : Syntax) : MacroM Syntax := do
-    if node.getKind == ``Lean.Parser.Term.doSeqIndent ||
-       node.getKind == `Lean.Parser.Term.doSeqBrack then
-      return (← expandGDoBlock node).raw
-    let newArgs ← node.getArgs.mapM fun child => do
-      if child.isAtom || child.isMissing then return child
-      else replaceDoSeqs child
-    return node.setArgs newArgs
-
-open Lean in
-@[macro gdoNotation] def expandGDo : Macro := fun stx => do
-  expandGDoBlock stx[1]
-
-section GDoExamples
-
-variable
   {M : GradedType G} [GradedMonad M]
   {α β γ : Type} {i j k : G}
 
@@ -106,11 +80,6 @@ example (x : M i α) (f : α → M j β) (g : β → M k γ) : M (i * (j * k)) �
     let b ← f a
     g b
 
-example (x : M i α) (y : M j β) : M (i * j) β :=
-  gdo
-    x
-    y
-
 example (x : M i Nat) : M (i * 1) Nat :=
   gdo
     let a ← x
@@ -123,12 +92,33 @@ example (x : M i (Option α)) (f : α → M j β) (e : M j β) : M (i * j) β :=
     | .some b => f b
     | .none => e
 
-example (x : M i (Option Nat)) : M (i * 1) Nat :=
+example (x : M i α) : M i α :=
   gdo
     let a ← x
-    match a with
-    | .some n => return n
-    | .none => return 0
+    return a
+
+example (x : M i α) (y : M 1 β) : M i β :=
+  gdo
+    let _ ← x
+    y
+    grade_by by simp
+
+example (x : M i Nat) : M (i * 1) Nat :=
+  gdo
+    let n ← x
+    if n == 0 then
+      return 1
+    else
+      return n
+
+example (x : M i Nat) : M (i * 1) Nat :=
+  gdo
+    return (← x) + 1
+
+example (x : M i (Nat × Nat)) : M (i * 1) Nat :=
+  gdo
+    let (a, b) ← x
+    return a + b
 
 example (x : M i α) : M i α :=
   gdo
@@ -136,9 +126,14 @@ example (x : M i α) : M i α :=
     return a
     grade_by by simp
 
-example (x : M i α) (y : M j β) : M (i * j) β :=
-  gdo
-    let _ ← x
-    y
+example (x : M i α) : M i α :=
+  gdo { let a ← x; return a; grade_by by simp }
 
-end GDoExamples
+example (x : M i α) (f : α → M j β) (g : β → M k γ) : M (i * j * k) γ :=
+  gdo
+    let a ← x
+    let b ← f a
+    g b
+    grade_by by rw [mul_assoc]
+
+end Examples
