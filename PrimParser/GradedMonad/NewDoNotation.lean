@@ -5,10 +5,12 @@ import PrimParser.GradedMonad.Basic
 # Graded Do-Notation
 
 Provides a `gdo'` block that desugars into `gbind`/`gpure` calls, mirroring
-Lean's built-in `do` notation for graded monads.
+Lean's built-in `do` notation for graded monads. An optional trailing
+`grade_by` element supplies a proof that the computed grade equals the
+expected one.
 -/
 
-open Lean Elab Term Meta Lean.Elab.Do
+open Lean Elab Term Meta Lean.Elab.Do Lean.Parser.Term
 
 namespace GradedDo
 
@@ -38,6 +40,18 @@ private def gradedOps (lctx : LocalContext) (insts : LocalInstances) (G M : Expr
     | throwError "gdo' needs a known expected type of the form `M i α`"
   let ops := gradedOps (← getLCtx) (← getLocalInstances) (← inferType i) M
   elabDoWith ops doSeq expectedType?
+
+syntax (name := gradeBy) "grade_by " term : doElem
+
+/-- `gcast h (gdo' items)` -/
+private def mkGradeCast (items : TSyntaxArray ``doSeqItem) (h : Term) : MacroM Term := do
+  if items.isEmpty then
+    Macro.throwError "`gdo'` block containing only `grade_by`"
+  `(gcast $h (gdo' $items:doSeqItem*))
+
+macro_rules
+  | `(gdo' $items:doSeqItem* grade_by $h) => mkGradeCast items h
+  | `(gdo' { $items:doSeqItem* grade_by $h }) => mkGradeCast items h
 
 end GradedDo
 
@@ -80,9 +94,10 @@ example (x : M i α) : M i α :=
     return a
 
 example (x : M i α) (y : M 1 β) : M i β :=
-  gcast (by simp) (gdo'
+  gdo'
     let _ ← x
-    y)
+    y
+    grade_by by simp
 
 example (x : M i Nat) : M (i * 1) Nat :=
   gdo'
@@ -100,5 +115,21 @@ example (x : M i (Nat × Nat)) : M (i * 1) Nat :=
   gdo'
     let (a, b) ← x
     return a + b
+
+example (x : M i α) : M i α :=
+  gdo'
+    let a ← x
+    return a
+    grade_by by simp
+
+example (x : M i α) : M i α :=
+  gdo' { let a ← x; return a; grade_by by simp }
+
+example (x : M i α) (f : α → M j β) (g : β → M k γ) : M (i * j * k) γ :=
+  gdo'
+    let a ← x
+    let b ← f a
+    g b
+    grade_by by rw [mul_assoc]
 
 end Examples

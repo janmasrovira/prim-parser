@@ -1,4 +1,5 @@
 import PrimParser.GradedMonad.Basic
+import PrimParser.GradedMonad.NewDoNotation
 
 /-!
 # Graded Do-Notation
@@ -11,8 +12,6 @@ expected one.
 
 variable
   {G : Type} [Monoid G]
-
-syntax "grade_by " term : doElem
 
 syntax (name := gdoNotation) "gdo " doSeq : term
 
