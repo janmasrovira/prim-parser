@@ -1208,12 +1208,12 @@ def sepByN
   (p : Parser ε ⟨ge, gc⟩ α)
   : (n : Nat) → Parser ε fallible (List.Vector α n)
   | 0 => ok .nil
-  | n + 1 => Parser.weaken (gdo
-    let sepP : Parser ε ⟨ge' ⊔ ge, gc' ⊔ gc⟩ α := gdo
+  | n + 1 => (gdo
+    let sepP := gdo
       let _ ← sep; p
     let p1 ← p
     let ps ← count n sepP
-    return (p1 ::ᵥ ps))
+    return (p1 ::ᵥ ps)) |>.weaken
 
 /-- Parse one or more occurrences of `p` separated by left-associative operator `op`. -/
 def chainl1

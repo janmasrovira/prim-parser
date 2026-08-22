@@ -36,10 +36,14 @@ private def gradedOps (lctx : LocalContext) (insts : LocalInstances) (G M : Expr
 @[term_elab gdoElab] def elabGDo : TermElab := fun stx expectedType? => do
   let `(gdo $doSeq) := stx | throwUnsupportedSyntax
   tryPostponeIfNoneOrMVar expectedType?
-  let some (.app (.app M i) _α) ← expectedType?.mapM instantiateMVars
-    | throwError "gdo needs a known expected type of the form `M i α`"
-  let ops := gradedOps (← getLCtx) (← getLocalInstances) (← inferType i) M
-  elabDoWith ops doSeq expectedType?
+  match ← expectedType?.mapM instantiateMVars with
+  | some (.app (.app M i) _α) =>
+    elabDoWith (gradedOps (← getLCtx) (← getLocalInstances) (← inferType i) M) doSeq expectedType?
+  | _ => -- Unknown expected type
+    let G ← mkFreshExprMVar (mkSort Level.one)
+    let M ← mkFreshExprMVar (← mkAppM ``GradedType #[G])
+    let ty := mkApp2 M (← mkFreshExprMVar G) (← mkFreshExprMVar (mkSort Level.one))
+    elabDoWith (gradedOps (← getLCtx) (← getLocalInstances) G M) doSeq ty
 
 syntax (name := gradeBy) "grade_by " term : doElem
 
