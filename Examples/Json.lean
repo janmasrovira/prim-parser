@@ -16,39 +16,39 @@ inductive Json where
 
 namespace Json
 
-private def keyword (s : String) (h : s ≠ "" := by decide) : StringParser conditional PUnit :=
+private def keyword (s : String) (h : s ≠ "" := by decide) : StringParser Error conditional PUnit :=
   lexeme (string s h)
 
-private def jnull : StringParser conditional Json :=
+private def jnull : StringParser Error conditional Json :=
   .null <$ᵍ keyword "null"
 
-private def jbool : StringParser conditional Json :=
+private def jbool : StringParser Error conditional Json :=
   Json.bool true <$ᵍ keyword "true"
   <|> Json.bool false <$ᵍ keyword "false"
 
-private def jnum : StringParser conditional Json :=
+private def jnum : StringParser Error conditional Json :=
   .num <$>ᵍ lexeme nat
 
-private def stringLit : StringParser conditional String := gdo
+private def stringLit : StringParser Error conditional String := gdo
   dquote
   let cs ← many (satisfy (· != '\"'))
   dquote
   return String.ofList cs
 
-private def jstring : StringParser conditional Json :=
+private def jstring : StringParser Error conditional Json :=
   .str <$>ᵍ lexeme stringLit
 
-def json : StringParser conditional Json :=
+def json : StringParser Error conditional Json :=
   fix (fun json_rec =>
-    let jarray : StringParser conditional Json := gdo
+    let jarray : StringParser Error conditional Json := gdo
       let items ← brackets (sepBy (lexeme comma) json_rec)
       return .arr items
-    let jpair : StringParser conditional (String × Json) := gdo
+    let jpair : StringParser Error conditional (String × Json) := gdo
       let k ← lexeme stringLit
       lexeme (char ':')
       let v ← json_rec
       return (k, v)
-    let jobject : StringParser conditional Json := gdo
+    let jobject : StringParser Error conditional Json := gdo
       let kvs ← braces (sepBy (lexeme comma) jpair)
       return .obj kvs
     oneOf (jnull ::₁ [jbool, jnum, jstring, jarray, jobject]))

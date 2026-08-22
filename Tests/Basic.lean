@@ -104,7 +104,7 @@ open Parser Parser.Char
 #guard int.runOption "-x" == none
 
 -- chainl1
-private def plus : StringParser conditional (Nat → Nat → Nat) := gdo
+private def plus : StringParser Error conditional (Nat → Nat → Nat) := gdo
   let _ ← satisfy (· == '+')
   return (· + ·)
 
@@ -160,7 +160,7 @@ private def plus : StringParser conditional (Nat → Nat → Nat) := gdo
 #guard (manyTill anyChar (char '.')).runOption "." == some []
 
 -- withRecovery
-private def recoverDigit : Error → StringParser conditional Nat :=
+private def recoverDigit : Error → StringParser Error conditional Nat :=
   fun _ => digit
 
 #guard (withRecovery recoverDigit (char 'x' >>=ᵍ fun _ => gpure 99)).runOption "x"
@@ -169,7 +169,7 @@ private def recoverDigit : Error → StringParser conditional Nat :=
     == some 5
 
 -- tryResume
-private def alwaysFail : StringParser conditional Char := satisfy (fun _ => false)
+private def alwaysFail : StringParser Error conditional Char := satisfy (fun _ => false)
 #guard (tryResume alwaysFail anyChar).runOption "abc" == some 'b'
 #guard (tryResume (withBacktracking alwaysFail) anyChar).runOption "abc" == some 'a'
 

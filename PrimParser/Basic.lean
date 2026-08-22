@@ -175,7 +175,7 @@ structure Parser (σ τ : Type) [Buffer σ τ] (ε : Type) (g : Grade) (α : Typ
 
 namespace Parser
 
-abbrev TokenParser (τ : Type) (g : Grade) (α : Type) : Type := Parser (Array τ) τ Error g α
+abbrev TokenParser (τ ε : Type) (g : Grade) (α : Type) : Type := Parser (Array τ) τ ε g α
 
 variable
   {σ τ : Type} [Buffer σ τ]

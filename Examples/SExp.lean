@@ -14,12 +14,12 @@ private def listToPairs : List SExp → SExp
   | x :: xs => .pair x (listToPairs xs)
   | [] => .atom ""
 
-def patom : StringParser conditional SExp :=
+def patom : StringParser Error conditional SExp :=
   .atom <$>ᵍ takeWhile1 (·.isAlphanum)
 
-def sexp : StringParser conditional SExp :=
+def sexp : StringParser Error conditional SExp :=
   fix (fun sexp_rec =>
-    let plist : StringParser conditional SExp := gdo
+    let plist : StringParser Error conditional SExp := gdo
       lexeme lparen
       let first ← sexp_rec
       let rest ← many (gdo whitespace; sexp_rec)

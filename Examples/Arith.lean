@@ -19,15 +19,15 @@ def eval : Expr → Int
   | .mul l r => l.eval * r.eval
   | .div l r => l.eval / r.eval
 
-private def addOp : StringParser conditional (Expr → Expr → Expr) :=
+private def addOp : StringParser Error conditional (Expr → Expr → Expr) :=
   Expr.add <$ᵍ lexeme (char '+')
   <|> Expr.sub <$ᵍ lexeme (char '-')
 
-private def mulOp : StringParser conditional (Expr → Expr → Expr) :=
+private def mulOp : StringParser Error conditional (Expr → Expr → Expr) :=
   Expr.mul <$ᵍ lexeme (char '*')
   <|> Expr.div <$ᵍ lexeme (char '/')
 
-def expr : StringParser conditional Expr :=
+def expr : StringParser Error conditional Expr :=
   fix (fun expr_rec =>
     let atom := Expr.lit <$>ᵍ lexeme nat <|> parens expr_rec
     let term := chainl1 mulOp atom

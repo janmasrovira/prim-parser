@@ -8,7 +8,7 @@ open Buffer
 
 namespace Parser
 
-abbrev StringParser (g : Grade) (α : Type) : Type := Parser ByteArray Char Error g α
+abbrev StringParser (ε : Type) (g : Grade) (α : Type) : Type := Parser ByteArray Char ε g α
 
 variable
   {α β γ ε ε' : Type}
@@ -32,21 +32,21 @@ def runOption (p : Parser ByteArray Char ε ⟨ge, gc⟩ α) (s : String) : Opti
 namespace Char
 
 /-- Consume a single byte. -/
-def anyByte : StringParser conditional UInt8 where
+def anyByte : StringParser Error conditional UInt8 where
   run {n} t := match n, t with
     | 0, _ => failure { error := Error.eof, restSize := 0 }
     | m + 1, t => success { result := t.head, restSize := m }
 
 /-- Consume a single UTF-8 character. -/
-abbrev anyChar : StringParser conditional Char := anyTok
+abbrev anyChar : StringParser Error conditional Char := anyTok
 
 /-- Match a specific character. -/
-def char (c : Char) : StringParser conditional PUnit :=
+def char (c : Char) : StringParser Error conditional PUnit :=
   skipSatisfy (· == c)
 
 /-- Match an exact non-empty string -/
-def string (str : String) (h : str ≠ "" := by decide) : StringParser conditional PUnit :=
-  let rec go (c : Char) : List Char → StringParser conditional PUnit
+def string (str : String) (h : str ≠ "" := by decide) : StringParser Error conditional PUnit :=
+  let rec go (c : Char) : List Char → StringParser Error conditional PUnit
     | [] => skipSatisfy (· == c)
     | c' :: cs => gdo
       skipSatisfy (· == c)
@@ -56,20 +56,20 @@ def string (str : String) (h : str ≠ "" := by decide) : StringParser condition
   | c :: cs => go c cs
 
 /-- Consume characters while `f` holds, returning the collected string. -/
-def takeWhile (f : Char → Bool) : StringParser flexible String :=
+def takeWhile (f : Char → Bool) : StringParser Error flexible String :=
   String.ofList <$>ᵍ many (satisfy f)
 
-@[specialize] private def takeWhileImpl (f : Char → Bool) : StringParser flexible String where
+@[specialize] private def takeWhileImpl (f : Char → Bool) : StringParser Error flexible String where
   run {n} t :=
     let s := t.takeWhile f
     success { result := s
               restSize := n - s.utf8ByteSize }
 
 /-- Consume one or more characters while `f` holds. -/
-def takeWhile1 (f : Char → Bool) : StringParser conditional String :=
+def takeWhile1 (f : Char → Bool) : StringParser Error conditional String :=
   (String.ofList ∘ NonEmptyList.toList) <$>ᵍ many1 (satisfy f)
 
-@[specialize] private def takeWhile1Impl (f : Char → Bool) : StringParser conditional String where
+@[specialize] private def takeWhile1Impl (f : Char → Bool) : StringParser Error conditional String where
   run {n} t := match n, t with
     | 0, _ =>
       failure { error := Error.eof
@@ -89,20 +89,20 @@ def takeWhile1 (f : Char → Bool) : StringParser conditional String :=
                     restSize := n + 1 }
 
 /-- Skip characters while `f` holds. -/
-def skipWhile (f : Char → Bool) : StringParser flexible PUnit :=
+def skipWhile (f : Char → Bool) : StringParser Error flexible PUnit :=
   () <$ᵍ takeWhile f
 
-@[specialize] private def skipWhileImpl (f : Char → Bool) : StringParser flexible PUnit where
+@[specialize] private def skipWhileImpl (f : Char → Bool) : StringParser Error flexible PUnit where
   run t :=
     let r := t.skipWhile f
     success { result := ()
               restSize := r.val }
 
 /-- Skip one or more characters while `f` holds. -/
-def skipWhile1 (f : Char → Bool) : StringParser conditional PUnit :=
+def skipWhile1 (f : Char → Bool) : StringParser Error conditional PUnit :=
   () <$ᵍ takeWhile1 f
 
-@[specialize] private def skipWhile1Impl (f : Char → Bool) : StringParser conditional PUnit where
+@[specialize] private def skipWhile1Impl (f : Char → Bool) : StringParser Error conditional PUnit where
   run {n} t := match n, t with
     | 0, _ =>
       failure { error := Error.eof
@@ -251,15 +251,15 @@ end
   next => exact skipWhile1_run_failure satisfy_run_eof
 
 /-- Skip zero or more whitespace characters. -/
-def whitespace : StringParser flexible PUnit :=
+def whitespace : StringParser Error flexible PUnit :=
   skipWhile Char.isWhitespace
 
 /-- Skip one or more whitespace characters. -/
-def whitespace1 : StringParser conditional PUnit :=
+def whitespace1 : StringParser Error conditional PUnit :=
   skipWhile1 Char.isWhitespace
 
 /-- Run `p` then skip trailing whitespace. -/
-def lexeme (p : StringParser ⟨ge, gc⟩ α) : StringParser ⟨ge, gc ⊔ possibly⟩ α := gdo
+def lexeme (p : StringParser Error ⟨ge, gc⟩ α) : StringParser Error ⟨ge, gc ⊔ possibly⟩ α := gdo
   let r ← p
   whitespace
   return r
@@ -275,72 +275,72 @@ def dquote := char '\"'
 def comma := char ','
 
 /-- Parse `p` surrounded by the delimiters `l` and `r`. Delimiters consume whitespace after them. -/
-def bracket (l r : StringParser conditional PUnit) (p : StringParser ⟨ge, gc⟩ α)
-  : StringParser ⟨ge ⊔ possibly, always⟩ α := rawBracket (lexeme l) (lexeme r) p
+def bracket (l r : StringParser Error conditional PUnit) (p : StringParser Error ⟨ge, gc⟩ α)
+  : StringParser Error ⟨ge ⊔ possibly, always⟩ α := rawBracket (lexeme l) (lexeme r) p
 
 /-- Parse `p` surrounded by parentheses. -/
-def parens (p : StringParser ⟨ge, gc⟩ α)
-  : StringParser ⟨ge ⊔ possibly, always⟩ α := bracket lparen rparen p
+def parens (p : StringParser Error ⟨ge, gc⟩ α)
+  : StringParser Error ⟨ge ⊔ possibly, always⟩ α := bracket lparen rparen p
 
 /-- Parse `p` surrounded by square brackets. -/
-def brackets (p : StringParser ⟨ge, gc⟩ α)
-  : StringParser ⟨ge ⊔ possibly, always⟩ α := bracket lbracket rbracket p
+def brackets (p : StringParser Error ⟨ge, gc⟩ α)
+  : StringParser Error ⟨ge ⊔ possibly, always⟩ α := bracket lbracket rbracket p
 
 /-- Parse `p` surrounded by curly braces. -/
-def braces (p : StringParser ⟨ge, gc⟩ α)
-  : StringParser ⟨ge ⊔ possibly, always⟩ α := bracket lbrace rbrace p
+def braces (p : StringParser Error ⟨ge, gc⟩ α)
+  : StringParser Error ⟨ge ⊔ possibly, always⟩ α := bracket lbrace rbrace p
 
 /-- Parse a single decimal digit, returning its numeric value. -/
-def digit : StringParser conditional Nat :=
+def digit : StringParser Error conditional Nat :=
   token fun c => if c.isDigit then some (c.toNat - '0'.toNat) else none
 
 /-- Parse a natural number (one or more digits). -/
-def nat : StringParser conditional Nat := gdo
+def nat : StringParser Error conditional Nat := gdo
   let d ← digit
   let ds ← many digit
   return ds.foldl (fun acc d => acc * 10 + d) d
 
 /-- Parse an integer (optional leading `-` followed by digits). -/
-def int : StringParser conditional Int := gdo
+def int : StringParser Error conditional Int := gdo
   let neg ← optional (char '-')
   let n ← nat
   return if neg.isSome then -n else n
 
-def space : StringParser conditional PUnit := skipSatisfy (· == ' ')
+def space : StringParser Error conditional PUnit := skipSatisfy (· == ' ')
 
-def tab : StringParser conditional PUnit := skipSatisfy (· == '\t')
+def tab : StringParser Error conditional PUnit := skipSatisfy (· == '\t')
 
 namespace ASCII
 
-def lf : StringParser conditional PUnit := skipSatisfy (· == '\n')
+def lf : StringParser Error conditional PUnit := skipSatisfy (· == '\n')
 
-def cr : StringParser conditional PUnit := skipSatisfy (· == '\r')
+def cr : StringParser Error conditional PUnit := skipSatisfy (· == '\r')
 
 /-- Match an ASCII uppercase letter. -/
-def uppercase : StringParser conditional Char := satisfy Char.isUpper
+def uppercase : StringParser Error conditional Char := satisfy Char.isUpper
 
 /-- Match an ASCII lowercase letter. -/
-def lowercase : StringParser conditional Char := satisfy Char.isLower
+def lowercase : StringParser Error conditional Char := satisfy Char.isLower
 
 /-- Match an ASCII letter. -/
-def alpha : StringParser conditional Char := satisfy Char.isAlpha
+def alpha : StringParser Error conditional Char := satisfy Char.isAlpha
 
 /-- Match an ASCII letter or digit. -/
-def alphanum : StringParser conditional Char := satisfy Char.isAlphanum
+def alphanum : StringParser Error conditional Char := satisfy Char.isAlphanum
 
 /-- Match an ASCII control character. -/
-def control : StringParser conditional Char :=
+def control : StringParser Error conditional Char :=
   satisfy fun c => c.val < 0x20 || c.val == 0x7F
 
 /-- Match a binary digit. -/
-def binDigit : StringParser conditional Bool :=
+def binDigit : StringParser Error conditional Bool :=
   token fun
     | '0' => some false
     | '1' => some true
-    | _   => none
+    | _ => none
 
 /-- Match an octal digit, returning its numeric value. -/
-def octDigit : StringParser conditional (Fin 8) :=
+def octDigit : StringParser Error conditional (Fin 8) :=
   token fun
     | '0' => some 0
     | '1' => some 1
@@ -353,7 +353,7 @@ def octDigit : StringParser conditional (Fin 8) :=
     | _ => none
 
 /-- Match a hexadecimal digit, returning its numeric value. -/
-def hexDigit : StringParser conditional (Fin 16) :=
+def hexDigit : StringParser Error conditional (Fin 16) :=
   token fun
     | '0' => some 0
     | '1' => some 1
@@ -376,7 +376,7 @@ def hexDigit : StringParser conditional (Fin 16) :=
 end ASCII
 
 /-- Match a line terminator: LF or CRLF. -/
-def eol : StringParser conditional PUnit := gdo
+def eol : StringParser Error conditional PUnit := gdo
   skipOptional ASCII.cr
   ASCII.lf
 
