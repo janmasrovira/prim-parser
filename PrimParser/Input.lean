@@ -29,6 +29,10 @@ theorem sub_width_lt
   : n - width σ t < n :=
   Buffer.sub_width_lt h
 
+theorem nextTok_isSome [UnitBuffer σ τ] (inp : Input σ τ n) (h : 0 < n)
+  : inp.nextTok.isSome :=
+  UnitBuffer.nextTok_isSome inp.buf n h inp.valid
+
 @[simp] theorem nextTok_eq_none {inp : Input σ τ 0} : inp.nextTok = none :=
   Buffer.nextTok_zero _
 

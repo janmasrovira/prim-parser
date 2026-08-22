@@ -56,3 +56,38 @@ instance {τ : Type} : Buffer (Array τ) τ where
   : nextTok a n = a[a.size - n]? := rfl
 
 end Buffer
+
+open Buffer
+
+/-- This class is for documentation only. -/
+class LawfulBuffer (σ τ : Type) [Buffer σ τ] : Prop where
+  size_nil : size τ (nil τ : σ) = 0
+  nextTok_saturate : ∀ (s : σ) (n : Nat), nextTok (τ := τ) s n = nextTok s (min n (size τ s))
+
+theorem LawfulBuffer.nextTok_nil {σ τ : Type} [Buffer σ τ] [LawfulBuffer σ τ] (n : Nat)
+  : nextTok (τ := τ) (nil τ : σ) n = none := by
+  rw [nextTok_saturate, size_nil, Nat.min_zero, nextTok_zero]
+
+instance : LawfulBuffer ByteArray Char where
+  size_nil := rfl
+  nextTok_saturate s n := by
+    simp only [nextTok_byteArray, size_byteArray]
+    congr 1
+    omega
+
+instance {τ : Type} : LawfulBuffer (Array τ) τ where
+  size_nil := rfl
+  nextTok_saturate a n := by
+    simp only [nextTok_array, size_array]
+    congr 1
+    omega
+
+class UnitBuffer (σ τ : Type) [Buffer σ τ] : Prop where
+  width_eq_one : ∀ t : τ, width σ t = 1
+  nextTok_isSome : ∀ (s : σ) (n : Nat), 0 < n → n ≤ size τ s → (nextTok (τ := τ) s n).isSome
+
+instance {τ : Type} : UnitBuffer (Array τ) τ where
+  width_eq_one _ := rfl
+  nextTok_isSome a n hn hsize := by
+    simp only [size_array] at hsize
+    simp [nextTok_array, Array.getElem?_eq_getElem (show a.size - n < a.size by omega)]
