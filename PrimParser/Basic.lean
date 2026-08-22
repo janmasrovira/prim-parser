@@ -1179,7 +1179,7 @@ def skip (n : Nat) (p : Parser ε ⟨ge, gc⟩ α)
   : Parser ε ⟨ge ⊓ possibly, gc ⊓ possibly⟩ PUnit :=
   () <$ᵍ count n p
 
-/-- Skip up to `n` occurrences of `p`; never fails. -/
+/-- Skip up to `n` occurrences of `p`. -/
 def skipUpTo : (n : Nat) → Parser ε ⟨ge, always⟩ α → Parser ε flexible PUnit
   | 0, _ => ok ()
   | n + 1, p => gdo
