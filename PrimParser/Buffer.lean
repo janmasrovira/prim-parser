@@ -5,7 +5,6 @@ The total size of the buffer is `size`, measured in (abstract) units.
 A token `t : τ` has a width of `width t` units. -/
 class Buffer (σ τ : Type) where
   size : σ → Nat
-  nil : σ
   width : τ → Nat
   width_pos : ∀ t, 0 < width t
   /-- `remaining` is the number of unconsumed units from `σ`. -/
@@ -30,7 +29,6 @@ theorem sub_width_lt {s : σ} {n : Nat} {t : τ}
 
 instance : Buffer ByteArray Char where
   size := ByteArray.size
-  nil := .empty
   width := Char.utf8Size
   width_pos := Char.utf8Size_pos
   nextTok s n := s.utf8DecodeChar? (s.size - n)
@@ -45,7 +43,6 @@ instance : Buffer ByteArray Char where
 
 instance {τ : Type} : Buffer (Array τ) τ where
   size := Array.size
-  nil := #[]
   width _ := 1
   width_pos _ := by simp
   nextTok a n := a[a.size - n]?
@@ -64,19 +61,12 @@ open Buffer
 
 /-- This class is for documentation only. -/
 class LawfulBuffer (σ τ : Type) [Buffer σ τ] : Prop where
-  size_nil : size τ (nil τ : σ) = 0
   nextTok_saturate : ∀ (s : σ) (n : Nat), nextTok (τ := τ) s n = nextTok s (min n (size τ s))
 
-theorem LawfulBuffer.nextTok_nil {σ τ : Type} [Buffer σ τ] [LawfulBuffer σ τ] (n : Nat)
-  : nextTok (τ := τ) (nil τ : σ) n = none := by
-  rw [nextTok_saturate, size_nil, Nat.min_zero, nextTok_zero]
-
 instance : LawfulBuffer ByteArray Char where
-  size_nil := rfl
   nextTok_saturate _ _ := by simp; congr 1; omega
 
 instance {τ : Type} : LawfulBuffer (Array τ) τ where
-  size_nil := rfl
   nextTok_saturate _ _ := by simp; congr 1; omega
 
 class UnitBuffer (σ τ : Type) [Buffer σ τ] : Prop where

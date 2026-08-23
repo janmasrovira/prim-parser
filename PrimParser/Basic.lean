@@ -345,10 +345,11 @@ def bind
     (onError := fun _ _ e => failure e)
     (soundError := fun h _e => le_sup_of_le_left h)
 
-instance : IsEmpty (Parser σ τ ε impossible α) where
-  false p := by
-    have h := p.sound Input.empty
-    cases hr : p.run Input.empty with
+instance [i : Nonempty σ] : IsEmpty (Parser σ τ ε impossible α) where
+  false p := i.elim fun s => by
+    let inp : Input σ τ 0 := ⟨s, Nat.zero_le _⟩
+    have h := p.sound inp
+    cases hr : p.run inp with
     | failure f => rw [hr] at h; contradiction
     | success s => have := s.witness; omega
 
@@ -682,8 +683,7 @@ def manyTill [ParserError ε]
   (e : Parser σ τ ε ⟨ge', always⟩ β)
   : Parser σ τ ε ⟨ge, always⟩ (List α) :=
   match ge with
-  | always => (fun x => [x]) <$>ᵍ p
-  | never => IsEmpty.false p |>.elim
+  | always | never => (fun x => [x]) <$>ᵍ p
   | possibly =>
       fix fun self =>
         oneOf (
@@ -743,17 +743,14 @@ def sepBy
   (sep : Parser σ τ ε ⟨ge', gc'⟩ β)
   (p : Parser σ τ ε ⟨ge, gc⟩ α)
   (h : gc' ⊔ gc = always := by simp)
-  : Parser σ τ ε flexible (List α) := gdo
+  : Parser σ τ ε flexible (List α) := weakenConsumes <| gdo
   let m ← optional p
   (match m with
    | .some f => gdo
      let rest ← many (sepItem sep p h)
      ok (gc := possibly) (f :: rest)
    | .none => ok (ge := never) [])
-  grade_by by
-    simp
-    cases ge <;> cases gc <;> simp
-    have := IsEmpty.false p; contradiction
+  grade_by by rfl
 
 /-- Parse one or more occurrences of `p` separated by `sep`. -/
 def sepBy1

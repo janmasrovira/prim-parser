@@ -36,10 +36,6 @@ theorem nextTok_isSome [UnitBuffer σ τ] (inp : Input σ τ n) (h : 0 < n)
 @[simp] theorem nextTok_eq_none {inp : Input σ τ 0} : inp.nextTok = none :=
   Buffer.nextTok_zero _
 
-def empty : Input σ τ 0 where
-  buf := nil τ
-  valid := Nat.zero_le _
-
 @[inline] def dropTo (inp : Input σ τ n) (m : Nat) (h : m ≤ n := by omega) : Input σ τ m where
   buf := inp.buf
   valid := h.trans inp.valid
