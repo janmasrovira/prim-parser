@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Benchmark runs unless *every* changed file matches this regex (docs/aux only).
-      EXCLUDE: '(\.md$|^docbuild/|\.gitignore$)'
+      EXCLUDE: '(\.md$|^docbuild/|\.gitignore$|^LICENSE$|^NOTICE$)'
     steps:
       - uses: actions/checkout@v5
         with:
