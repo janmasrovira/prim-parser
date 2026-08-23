@@ -6,7 +6,7 @@
 -- - Rows separated by newline (\n)
 import PrimParser
 
-open Parser
+open Parser Parser.Utf8
 
 namespace Csv
 
@@ -33,45 +33,45 @@ instance : BEq ((n : Nat) × Table n) where
 
 private def newline := char '\n'
 
-private def escapedQuote : Parser Error conditional Char := gdo
+private def escapedQuote : Utf8Parser Error conditional Char := gdo
   dquote
   dquote
   return '\"'
 
-private def quotedField : Parser Error conditional String := gdo
+private def quotedField : Utf8Parser Error conditional String := gdo
   dquote
   let cs ← many (escapedQuote <|> satisfy (· != '\"'))
   dquote
   return String.ofList cs
 
-private def unquotedField : Parser Error flexible String :=
+private def unquotedField : Utf8Parser Error flexible String :=
   takeWhile (fun c => c != ',' && c != '\"' && c != '\n')
 
-private def field : Parser Error flexible String :=
+private def field : Utf8Parser Error flexible String :=
   quotedField <|> unquotedField
 
-private def int : Parser Error conditional Int := gdo
+private def int : Utf8Parser Error conditional Int := gdo
   let neg ← optional (char '-')
   let n ← nat
   return if neg.isSome then -↑n else ↑n
 
-private def value : Parser Error flexible Value :=
+private def value : Utf8Parser Error flexible Value :=
   .int <$>ᵍ int <|> .str <$>ᵍ unquotedField
 
-private def quotedValue : Parser Error conditional Value := gdo
+private def quotedValue : Utf8Parser Error conditional Value := gdo
   let s ← quotedField
   return .str s
 
-private def cell : Parser Error flexible Value :=
+private def cell : Utf8Parser Error flexible Value :=
   quotedValue <|> value
 
-def row : Parser Error flexible (List String) :=
+def row : Utf8Parser Error flexible (List String) :=
   sepBy comma field
 
-private def exactRow (n : Nat) : Parser Error fallible (List.Vector Value n) :=
+private def exactRow (n : Nat) : Utf8Parser Error fallible (List.Vector Value n) :=
   sepByN comma cell n
 
-def table : Parser Error conditional ((n : Nat) × Table n) := gdo
+def table : Utf8Parser Error conditional ((n : Nat) × Table n) := gdo
   let headers ← row
   newline
   let n := headers.length

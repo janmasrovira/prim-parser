@@ -37,8 +37,13 @@ def gcast {f : GradedType G} {i j : G} {α} (h : i = j) (x : f i α) : f j α :=
 abbrev gconst {f : GradedType G} [GradedFunctor f] {i α β} (b : β) (x : f i α) : f i β :=
   gmap (fun _ => b) x
 
+/-- `gconst` with the arguments flipped. -/
+abbrev gconstRev {f : GradedType G} [GradedFunctor f] {i α β} (x : f i α) (b : β) : f i β :=
+  gconst b x
+
 infixr:100 " <$>ᵍ " => gmap
 infixr:100 " <$ᵍ "  => gconst
+infixl:100 " $>ᵍ "  => gconstRev
 infixl:60  " <*>ᵍ " => gseq
 infixl:55  " >>=ᵍ " => gbind
 
