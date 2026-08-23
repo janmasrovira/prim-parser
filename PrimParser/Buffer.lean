@@ -1,11 +1,14 @@
 import Mathlib.Order.Fin.Basic
 
-/-- `σ` is a sequence of tokens of type `τ` -/
+/-- `σ` is a sequence of tokens of type `τ`.
+The total size of the buffer is `size`, measured in (abstract) units.
+A token `t : τ` has a width of `width t` units. -/
 class Buffer (σ τ : Type) where
   size : σ → Nat
   nil : σ
   width : τ → Nat
   width_pos : ∀ t, 0 < width t
+  /-- `remaining` is the number of unconsumed units from `σ`. -/
   nextTok : σ → (remaining : Nat) → Option τ
   nextTok_le : ∀ {s n t}, nextTok s n = some t → width t ≤ n
 
