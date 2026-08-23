@@ -94,6 +94,10 @@ def ofArray {τ : Type} (a : Array τ) : Input (Array τ) τ a.size where
   buf := a
   valid := by simp
 
+def ofByteArray (b : ByteArray) : Input ByteArray UInt8 b.size where
+  buf := b
+  valid := by simp
+
 section Bytes
 
 variable {n : Nat}
