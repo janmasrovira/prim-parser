@@ -68,11 +68,3 @@ instance : LawfulBuffer ByteArray Char where
 
 instance {τ : Type} : LawfulBuffer (Array τ) τ where
   nextTok_saturate _ _ := by simp; congr 1; omega
-
-class UnitBuffer (σ τ : Type) [Buffer σ τ] : Prop where
-  width_eq_one : ∀ t : τ, width σ t = 1
-  nextTok_isSome : ∀ (s : σ) (n : Nat), 0 < n → n ≤ size τ s → (nextTok (τ := τ) s n).isSome
-
-instance {τ : Type} : UnitBuffer (Array τ) τ where
-  width_eq_one _ := rfl
-  nextTok_isSome _ _ _ _ := by simp_all; omega
