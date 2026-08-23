@@ -4,14 +4,14 @@ open Parser Parser.Char
 
 namespace Balanced
 
-def group : StringParser Error conditional PUnit :=
+def group : Utf8Parser Error conditional PUnit :=
   fix (fun rec => gdo
     char '('
     skipMany rec
     char ')')
 
 /-- A sequence of balanced groups followed by end-of-input, e.g. `()()`, `()(())`. -/
-def balanced : StringParser Error fallible PUnit := gdo
+def balanced : Utf8Parser Error fallible PUnit := gdo
   skipMany group
   eof
 

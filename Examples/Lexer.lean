@@ -13,7 +13,7 @@ inductive Tk where
 
 namespace Lex
 
-def one : StringParser Error conditional Tk :=
+def one : Utf8Parser Error conditional Tk :=
   oneOf (
     (Tk.num <$>ᵍ nat) ::₁
     [ Tk.plus <$ᵍ char '+'
@@ -22,7 +22,7 @@ def one : StringParser Error conditional Tk :=
     , Tk.lparen <$ᵍ char '('
     , Tk.rparen <$ᵍ char ')' ])
 
-def lex : StringParser Error flexible (Array Tk) := gdo
+def lex : Utf8Parser Error flexible (Array Tk) := gdo
   whitespace
   let ts ← many (lexeme one)
   return ts.toArray
