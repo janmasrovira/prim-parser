@@ -2,50 +2,51 @@ import PrimParser
 
 open Parser Parser.Utf8
 
-inductive Tk where
+inductive Token where
   | num (n : Nat)
   | plus
   | minus
   | times
   | lparen
   | rparen
-  deriving Repr, BEq, Inhabited
+  deriving Repr, BEq
 
 namespace Lex
 
-def one : Utf8Parser Error conditional Tk :=
+def tok : Utf8Parser Error conditional Token :=
   oneOf (
-    (Tk.num <$>ᵍ nat) ::₁
-    [ Tk.plus <$ᵍ char '+'
-    , Tk.minus <$ᵍ char '-'
-    , Tk.times <$ᵍ char '*'
-    , Tk.lparen <$ᵍ char '('
-    , Tk.rparen <$ᵍ char ')' ])
+    (Token.num <$>ᵍ nat) ::₁
+    [ char '+' $>ᵍ Token.plus
+    , char '-' $>ᵍ Token.minus
+    , char '*' $>ᵍ Token.times
+    , char '(' $>ᵍ Token.lparen
+    , char ')' $>ᵍ Token.rparen ])
 
-def lex : Utf8Parser Error flexible (Array Tk) := gdo
+def lex : Utf8Parser Error flexible (Array Token) := gdo
   whitespace
-  let ts ← many (lexeme one)
+  let ts ← many (lexeme tok)
   return ts.toArray
 
-def sym (t : Tk) : TokenParser Tk Error conditional PUnit := skipSatisfy (· == t)
+def sym (t : Token) : TokenParser Token Error conditional PUnit := skipSatisfy (· == t)
 
-def num : TokenParser Tk Error conditional Nat :=
+def num : TokenParser Token Error conditional Nat :=
   token fun
     | .num n => some n
     | _ => none
 
-def addOp : TokenParser Tk Error conditional (Nat → Nat → Nat) :=
-  (· + ·) <$ᵍ sym .plus <|> (· - ·) <$ᵍ sym .minus
+def addOp : TokenParser Token Error conditional (Nat → Nat → Nat) :=
+  (gdo sym .plus; return (· + ·))
+  <|> (gdo sym .minus; return (· - ·))
 
-def mulOp : TokenParser Tk Error conditional (Nat → Nat → Nat) :=
-  (· * ·) <$ᵍ sym .times
+def mulOp : TokenParser Token Error conditional (Nat → Nat → Nat) :=
+  gdo sym .times; return (· * ·)
 
-def eval : TokenParser Tk Error conditional Nat :=
+def eval : TokenParser Token Error conditional Nat :=
   fix fun self =>
     let atom := num <|> rawBracket (sym .lparen) (sym .rparen) self
     chainl1 addOp (chainl1 mulOp atom)
 
-def evalAll : TokenParser Tk Error conditional Nat := gdo
+def evalAll : TokenParser Token Error conditional Nat := gdo
   let v ← eval
   eof
   return v
