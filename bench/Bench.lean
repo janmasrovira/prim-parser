@@ -8,7 +8,7 @@ import Examples.Json
 import Examples.Arith
 import Examples.Csv
 
-open Parser Parser.Char
+open Parser Parser.Utf8
 
 /-- Build a length-indexed `Input` from a `String`. -/
 def toInput (s : String) : Input ByteArray Char s.toUTF8.size := Input.ofString s

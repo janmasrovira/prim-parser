@@ -1,6 +1,6 @@
 import PrimParser
 
-open Parser Parser.Char
+open Parser Parser.Utf8
 
 inductive Expr where
   | lit (n : Nat)

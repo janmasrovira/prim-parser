@@ -1,7 +1,7 @@
 -- Untyped lambda calculus parser
 import PrimParser
 
-open Parser Parser.Char
+open Parser Parser.Utf8
 
 inductive Term where
   | var (name : String)

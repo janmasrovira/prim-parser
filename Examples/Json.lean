@@ -3,7 +3,7 @@
 -- - Strings: no escape sequences (\n, \\, \uXXXX, etc.)
 import PrimParser
 
-open Parser Parser.Char
+open Parser Parser.Utf8
 
 inductive Json where
   | null

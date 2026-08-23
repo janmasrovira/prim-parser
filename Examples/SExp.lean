@@ -1,6 +1,6 @@
 import PrimParser
 
-open Parser Parser.Char
+open Parser Parser.Utf8
 
 inductive SExp where
   | atom (str : String)

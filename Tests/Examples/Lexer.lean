@@ -1,7 +1,7 @@
 import Examples.Lexer
 import Tests.Basic
 
-open Parser Parser.Char Lex
+open Parser Parser.Utf8 Lex
 
 #guard lex.runOption "1+2" == some #[.num 1, .plus, .num 2]
 #guard lex.runOption "  12 * ( 3 ) " == some #[.num 12, .times, .lparen, .num 3, .rparen]

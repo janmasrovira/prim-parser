@@ -1,7 +1,7 @@
 import Examples.SExp
 import Tests.Basic
 
-open Parser Parser.Char SExp
+open Parser Parser.Utf8 SExp
 
 #guard sexp.runOption "hello" == some (.atom "hello")
 

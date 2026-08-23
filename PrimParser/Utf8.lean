@@ -29,7 +29,7 @@ theorem runParser_sound (p : Parser ByteArray Char ε g α) (s : String)
 def runOption (p : Parser ByteArray Char ε ⟨ge, gc⟩ α) (s : String) : Option α :=
   (p.runParser s).toOption
 
-namespace Char
+namespace Utf8
 
 /-- Consume a single byte. -/
 def anyByte : Utf8Parser Error conditional UInt8 where
@@ -380,6 +380,6 @@ def eol : Utf8Parser Error conditional PUnit := gdo
   skipOptional ASCII.cr
   ASCII.lf
 
-end Char
+end Utf8
 
 end Parser

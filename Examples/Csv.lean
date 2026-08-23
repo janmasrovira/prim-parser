@@ -6,7 +6,7 @@
 -- - Rows separated by newline (\n)
 import PrimParser
 
-open Parser Parser.Char
+open Parser Parser.Utf8
 
 namespace Csv
 

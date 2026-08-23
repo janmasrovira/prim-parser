@@ -1,6 +1,6 @@
 import PrimParser
 
-open Parser Parser.Char
+open Parser Parser.Utf8
 
 #guard anyChar.runOption "abc" == some 'a'
 #guard anyChar.runOption "" == none

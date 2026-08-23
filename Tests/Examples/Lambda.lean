@@ -1,7 +1,7 @@
 import Examples.Lambda
 import Tests.Basic
 
-open Parser Parser.Char Term
+open Parser Parser.Utf8 Term
 
 -- variable
 #guard term.runOption "x" == some (.var "x")

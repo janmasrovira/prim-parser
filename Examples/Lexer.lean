@@ -1,6 +1,6 @@
 import PrimParser
 
-open Parser Parser.Char
+open Parser Parser.Utf8
 
 inductive Tk where
   | num (n : Nat)
