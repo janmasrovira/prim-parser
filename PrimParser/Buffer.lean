@@ -70,17 +70,11 @@ theorem LawfulBuffer.nextTok_nil {σ τ : Type} [Buffer σ τ] [LawfulBuffer σ 
 
 instance : LawfulBuffer ByteArray Char where
   size_nil := rfl
-  nextTok_saturate s n := by
-    simp only [nextTok_byteArray, size_byteArray]
-    congr 1
-    omega
+  nextTok_saturate _ _ := by simp; congr 1; omega
 
 instance {τ : Type} : LawfulBuffer (Array τ) τ where
   size_nil := rfl
-  nextTok_saturate a n := by
-    simp only [nextTok_array, size_array]
-    congr 1
-    omega
+  nextTok_saturate _ _ := by simp; congr 1; omega
 
 class UnitBuffer (σ τ : Type) [Buffer σ τ] : Prop where
   width_eq_one : ∀ t : τ, width σ t = 1
@@ -88,6 +82,4 @@ class UnitBuffer (σ τ : Type) [Buffer σ τ] : Prop where
 
 instance {τ : Type} : UnitBuffer (Array τ) τ where
   width_eq_one _ := rfl
-  nextTok_isSome a n hn hsize := by
-    simp only [size_array] at hsize
-    simp [nextTok_array, Array.getElem?_eq_getElem (show a.size - n < a.size by omega)]
+  nextTok_isSome _ _ _ _ := by simp_all; omega
