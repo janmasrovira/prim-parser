@@ -4,7 +4,11 @@ import PrimParser.Buffer
 
 open Buffer
 
-/-- Input to a parser. `n` is the number of units that haven't been consumed yet. -/
+/-- Input to a parser. `n` is the number of units that haven't been consumed yet.
+
+NOTE: The main reason `n` is a type parameter instead of a field is performance.
+Because `n` is not a field, `buf` is the only non-Prop field, so `Input` is erased during compilation.
+-/
 structure Input (σ τ : Type) [Buffer σ τ] (n : Nat) where
   buf : σ
   valid : n ≤ size τ buf
