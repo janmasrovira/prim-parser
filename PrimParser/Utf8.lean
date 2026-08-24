@@ -21,10 +21,6 @@ variable
 def runParser (p : Parser ByteArray Char ε g α) (s : String) : Except ε α :=
   p.runOn (Input.ofString s)
 
-theorem runParser_sound (p : Parser ByteArray Char ε g α) (s : String)
-  : Except.Sound g.errors (p.runParser s) :=
-  p.runOn_sound _
-
 /-- Run a parser on a `String`, discarding the error and returning the value as an `Option`. -/
 def runOption (p : Parser ByteArray Char ε ⟨ge, gc⟩ α) (s : String) : Option α :=
   (p.runParser s).toOption

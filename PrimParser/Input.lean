@@ -102,7 +102,8 @@ section Bytes
 
 variable {n : Nat}
 
-@[inline] def pos (inp : Input ByteArray Char n) : Nat := inp.buf.size - n
+@[inline] def pos {τ : Type} [Buffer ByteArray τ] (inp : Input ByteArray τ n) : Nat :=
+  inp.buf.size - n
 
 theorem pos_lt (inp : Input ByteArray Char (n + 1)) : inp.pos < inp.buf.size := by
   have := inp.valid; simp only [pos, size_byteArray] at *; omega
