@@ -44,27 +44,25 @@ private def takeRestImpl : ByteParser Error flexible ByteArray where
     success { result := t.buf.extract t.pos t.buf.size
               restSize := 0 }
 
-private theorem nextTok_eq (t : Input ByteArray UInt8 (n + 1))
-  (h : t.pos < t.buf.size := by have := t.valid; simp only [Input.pos, size_uint8] at this ⊢; omega)
+private theorem nextTok_eq
+  (t : Input ByteArray UInt8 (n + 1))
+  (h : t.pos < t.buf.size := by simpa using t.pos_lt)
   : t.nextTok = some t.buf[t.pos] := by simp [Input.pos]
 
-theorem many_go_anyTok_restSize (n : Nat)
-  : ∀ t : Input ByteArray UInt8 n, (many.go anyTok t).restSize = 0 := by
-  induction n with
-  | zero => intro t; rw [many.go, anyTok_run_eof]
-  | succ n ih => intro t; rw [many.go, anyTok_run_some (nextTok_eq t)]; exact ih _
+theorem many_go_anyTok_restSize
+  (t : Input ByteArray UInt8 n)
+  : (many.go anyTok t).restSize = 0 := by
+  induction n <;> rw [many.go]
+  case zero => rw [anyTok_run_eof]
+  case succ n ih => rw [anyTok_run_some (nextTok_eq t), ih]
 
-theorem many_go_anyTok_result (n : Nat)
-  : ∀ t : Input ByteArray UInt8 n, (many.go anyTok t).result = t.buf.data.toList.drop t.pos := by
-  induction n with
-  | zero => intro t; rw [many.go, anyTok_run_eof]; simp [Input.pos]
-  | succ n ih =>
-    intro t
-    have hv : n + 1 ≤ t.buf.size := by simpa using t.valid
-    rw [many.go, anyTok_run_some (nextTok_eq t)]
-    simp only [ih, Input.dropTo, width_uint8, Input.pos, ByteArray.getElem_eq_getElem_data,
-      ← Array.getElem_toList, show t.buf.size - n = t.buf.size - (n + 1) + 1 by omega,
-      List.getElem_cons_drop]
+theorem many_go_anyTok_result
+  (t : Input ByteArray UInt8 n)
+  : (many.go anyTok t).result = t.buf.data.toList.drop t.pos := by
+  induction n <;> rw [many.go]
+  case zero => simp [anyTok_run_eof, Input.pos]
+  case succ n ih =>
+    simp [anyTok_run_some (nextTok_eq t), ih, ByteArray.getElem_eq_getElem_data, ← Array.getElem_toList]
 
 @[csimp] private theorem takeRest_eq_impl : @takeRest = @takeRestImpl := by
   ext n t

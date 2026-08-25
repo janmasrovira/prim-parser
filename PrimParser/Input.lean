@@ -45,6 +45,18 @@ theorem sub_width_lt
 @[simp] theorem dropTo_trans (inp : Input σ τ n) (h : m ≤ n) (h' : k ≤ m)
   : (inp.dropTo m h).dropTo k h' = inp.dropTo k (h'.trans h) := rfl
 
+@[simp] theorem dropTo_buf (inp : Input σ τ n) (h : m ≤ n) : (inp.dropTo m h).buf = inp.buf := rfl
+
+/-- how many units have been consumedfrom `inp`. -/
+@[inline] def pos (inp : Input σ τ n) : Nat := size τ inp.buf - n
+
+@[simp] theorem pos_dropTo (inp : Input σ τ n) (h : m ≤ n)
+  : (inp.dropTo m h).pos = inp.pos + (n - m) := by
+  have := inp.valid; simp only [pos, dropTo_buf]; omega
+
+theorem pos_lt (inp : Input σ τ (n + 1)) : inp.pos < size τ inp.buf := by
+  have := inp.valid; simp only [pos]; omega
+
 /-- Move past one token. -/
 abbrev advance (inp : Input σ τ n) (t : τ) : Input σ τ (n - width σ t) :=
   inp.dropTo (n - width σ t)
@@ -102,14 +114,8 @@ section Bytes
 
 variable {n : Nat}
 
-@[inline] def pos {τ : Type} [Buffer ByteArray τ] (inp : Input ByteArray τ n) : Nat :=
-  inp.buf.size - n
-
-theorem pos_lt (inp : Input ByteArray Char (n + 1)) : inp.pos < inp.buf.size := by
-  have := inp.valid; simp only [pos, size_byteArray] at *; omega
-
 @[inline] def head (inp : Input ByteArray Char (n + 1)) : UInt8 :=
-  have := inp.pos_lt
+  have : inp.pos < inp.buf.size := by simpa using inp.pos_lt
   inp.buf[inp.pos]
 
 def ofString (s : String) : Input ByteArray Char s.toUTF8.size where
