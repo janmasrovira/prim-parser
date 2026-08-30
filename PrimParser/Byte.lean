@@ -1,4 +1,5 @@
 import PrimParser.Basic
+import PrimParser.BytesWindow
 
 open Buffer
 
@@ -39,15 +40,15 @@ private theorem pos_add_le {m : Nat} (t : Input ByteArray UInt8 n) (h : m + 1 �
   : t.pos + m + 1 ≤ t.buf.size := by
   have := t.valid; simp only [Input.pos, size_uint8] at *; omega
 
-/-- Consume exactly `k + 1` bytes and decode them in place.
-    The decoder should read b[p .. p + k + 1] -/
-private def withTake1
+/-- Consume exactly `k + 1` bytes and decode them in place. -/
+@[inline] private def withTake1
   (k : Nat)
-  (decode : (b : ByteArray) → (p : Nat) → p + k + 1 ≤ b.size → α)
+  (decode : BytesWindow (k + 1) → α)
   : ByteParser Error conditional α where
   run {n} t :=
     if h : k + 1 ≤ n then
-      success { result := decode t.buf t.pos (pos_add_le t h), restSize := n - (k + 1) }
+      success { result := decode { buf := t.buf, start := t.pos, valid := pos_add_le t h }
+                restSize := n - (k + 1) }
     else
       failure { error := Error.eof, restSize := 0 }
 
@@ -151,14 +152,15 @@ section
 
 variable
   {k : Nat}
-  {decode : (b : ByteArray) → (p : Nat) → p + k + 1 ≤ b.size → α}
+  {decode : BytesWindow (k + 1) → α}
 
 private theorem withTake1_run_success
   {t : Input ByteArray UInt8 n}
   (h : k + 1 ≤ n := by assumption)
-  (hp : t.pos + k + 1 ≤ t.buf.size := by exact pos_add_le _ (by omega))
+  (hp : t.pos + (k + 1) ≤ t.buf.size := by exact pos_add_le _ (by omega))
   : (withTake1 k decode).run t
-    = success { result := decode t.buf t.pos hp, restSize := n - (k + 1) } := by
+    = success { result := decode { buf := t.buf, start := t.pos, valid := hp }
+                restSize := n - (k + 1) } := by
   simp [withTake1, h]
 
 private theorem withTake1_run_eof
@@ -173,7 +175,7 @@ private theorem gpure_run (a : α) (t : Input ByteArray UInt8 n)
   : (gpure a : ByteParser Error 1 α).run t = success { result := a, restSize := n } := rfl
 
 private theorem anyTok_eq_withTake1
-  : anyTok = withTake1 0 (fun b p _ => b[p]'(by omega)) := by
+  : anyTok = withTake1 0 (fun b => b[0]) := by
   ext n t
   cases n with
   | zero => simp [withTake1, anyTok_run_eof]
@@ -181,15 +183,15 @@ private theorem anyTok_eq_withTake1
 
 /-- Two adjacent reads are one read of the combined width. -/
 private theorem withTake1_bind {j k : Nat}
-  (decodeFst : (b : ByteArray) → (p : Nat) → p + j + 1 ≤ b.size → α)
-  (decodeSnd : (b : ByteArray) → (p : Nat) → p + k + 1 ≤ b.size → β)
+  (decodeFst : BytesWindow (j + 1) → α)
+  (decodeSnd : BytesWindow (k + 1) → β)
   (combine : α → β → γ)
   : (gdo
       let x ← withTake1 j decodeFst
       let y ← withTake1 k decodeSnd
       return combine x y)
-    = withTake1 (j + k + 1) fun b p h =>
-        combine (decodeFst b p (by omega)) (decodeSnd b (p + j + 1) (by omega)) := by
+    = withTake1 (j + k + 1) fun b =>
+        combine (decodeFst (b.narrow 0 (j + 1))) (decodeSnd (b.narrow (j + 1) (k + 1))) := by
   ext n t
   simp only [gbind_run, Success.bindParser]
   by_cases hj : j + 1 ≤ n
@@ -213,42 +215,44 @@ private theorem withTake1_bind {j k : Nat}
       rfl
 
 private theorem withTake1_gmap {k : Nat}
-  (decode : (b : ByteArray) → (p : Nat) → p + k + 1 ≤ b.size → α)
+  (decode : BytesWindow (k + 1) → α)
   (f : α → β)
-  : (f <$>ᵍ withTake1 k decode) = withTake1 k (fun b p h => f (decode b p h)) := by
+  : (f <$>ᵍ withTake1 k decode) = withTake1 k (fun b => f (decode b)) := by
   ext n t
   simp only [gmap_run, withTake1]
   split <;> rfl
 
-private abbrev be16 (b : ByteArray) (p : Nat) (h : p + 2 ≤ b.size) : UInt16 :=
-  (b[p]'(by omega)).toUInt16 <<< 8 ||| (b[p + 1]'(by omega)).toUInt16
+private abbrev be16 (b : BytesWindow 2) : UInt16 :=
+  b[0].toUInt16 <<< 8 ||| b[1].toUInt16
 
-private abbrev le16 (b : ByteArray) (p : Nat) (h : p + 2 ≤ b.size) : UInt16 :=
-  (b[p + 1]'(by omega)).toUInt16 <<< 8 ||| (b[p]'(by omega)).toUInt16
+private abbrev le16 (b : BytesWindow 2) : UInt16 :=
+  b[1].toUInt16 <<< 8 ||| b[0].toUInt16
 
-private abbrev be32 (b : ByteArray) (p : Nat) (h : p + 4 ≤ b.size) : UInt32 :=
-  (be16 b p (by omega)).toUInt32 <<< 16 ||| (be16 b (p + 2) (by omega)).toUInt32
+private abbrev be32 (b : BytesWindow 4) : UInt32 :=
+  (be16 (b.narrow 0 2)).toUInt32 <<< 16 ||| (be16 (b.narrow 2 2)).toUInt32
 
-private abbrev le32 (b : ByteArray) (p : Nat) (h : p + 4 ≤ b.size) : UInt32 :=
-  (le16 b (p + 2) (by omega)).toUInt32 <<< 16 ||| (le16 b p (by omega)).toUInt32
+private abbrev le32 (b : BytesWindow 4) : UInt32 :=
+  (le16 (b.narrow 2 2)).toUInt32 <<< 16 ||| (le16 (b.narrow 0 2)).toUInt32
 
-private abbrev be64 (b : ByteArray) (p : Nat) (h : p + 8 ≤ b.size) : UInt64 :=
-  (be32 b p (by omega)).toUInt64 <<< 32 ||| (be32 b (p + 4) (by omega)).toUInt64
+private abbrev be64 (b : BytesWindow 8) : UInt64 :=
+  (be32 (b.narrow 0 4)).toUInt64 <<< 32 ||| (be32 (b.narrow 4 4)).toUInt64
 
-private abbrev le64 (b : ByteArray) (p : Nat) (h : p + 8 ≤ b.size) : UInt64 :=
-  (le32 b (p + 4) (by omega)).toUInt64 <<< 32 ||| (le32 b p (by omega)).toUInt64
+private abbrev le64 (b : BytesWindow 8) : UInt64 :=
+  (le32 (b.narrow 4 4)).toUInt64 <<< 32 ||| (le32 (b.narrow 0 4)).toUInt64
 
 private def uint16beImpl : ByteParser Error conditional UInt16 :=
   withTake1 1 be16
 
 @[csimp] private theorem uint16be_eq_impl : @uint16be = @uint16beImpl := by
   rw [uint16be, uint16beImpl, uint8, anyTok_eq_withTake1, withTake1_bind]
+  rfl
 
 private def uint16leImpl : ByteParser Error conditional UInt16 :=
   withTake1 1 le16
 
 @[csimp] private theorem uint16le_eq_impl : @uint16le = @uint16leImpl := by
   rw [uint16le, uint16leImpl, uint8, anyTok_eq_withTake1, withTake1_bind]
+  rfl
 
 private def uint32beImpl : ByteParser Error conditional UInt32 :=
   withTake1 3 be32
@@ -275,37 +279,37 @@ private def uint64leImpl : ByteParser Error conditional UInt64 :=
   rw [uint64le, uint64leImpl, uint32le_eq_impl, uint32leImpl, withTake1_bind]
 
 private def int16beImpl : ByteParser Error conditional Int16 :=
-  withTake1 1 fun b p h => (be16 b p h).toInt16
+  withTake1 1 fun b => (be16 b).toInt16
 
 @[csimp] private theorem int16be_eq_impl : @int16be = @int16beImpl := by
   rw [int16be, int16beImpl, uint16be_eq_impl, uint16beImpl, withTake1_gmap]
 
 private def int16leImpl : ByteParser Error conditional Int16 :=
-  withTake1 1 fun b p h => (le16 b p h).toInt16
+  withTake1 1 fun b => (le16 b).toInt16
 
 @[csimp] private theorem int16le_eq_impl : @int16le = @int16leImpl := by
   rw [int16le, int16leImpl, uint16le_eq_impl, uint16leImpl, withTake1_gmap]
 
 private def int32beImpl : ByteParser Error conditional Int32 :=
-  withTake1 3 fun b p h => (be32 b p h).toInt32
+  withTake1 3 fun b => (be32 b).toInt32
 
 @[csimp] private theorem int32be_eq_impl : @int32be = @int32beImpl := by
   rw [int32be, int32beImpl, uint32be_eq_impl, uint32beImpl, withTake1_gmap]
 
 private def int32leImpl : ByteParser Error conditional Int32 :=
-  withTake1 3 fun b p h => (le32 b p h).toInt32
+  withTake1 3 fun b => (le32 b).toInt32
 
 @[csimp] private theorem int32le_eq_impl : @int32le = @int32leImpl := by
   rw [int32le, int32leImpl, uint32le_eq_impl, uint32leImpl, withTake1_gmap]
 
 private def int64beImpl : ByteParser Error conditional Int64 :=
-  withTake1 7 fun b p h => (be64 b p h).toInt64
+  withTake1 7 fun b => (be64 b).toInt64
 
 @[csimp] private theorem int64be_eq_impl : @int64be = @int64beImpl := by
   rw [int64be, int64beImpl, uint64be_eq_impl, uint64beImpl, withTake1_gmap]
 
 private def int64leImpl : ByteParser Error conditional Int64 :=
-  withTake1 7 fun b p h => (le64 b p h).toInt64
+  withTake1 7 fun b => (le64 b).toInt64
 
 @[csimp] private theorem int64le_eq_impl : @int64le = @int64leImpl := by
   rw [int64le, int64leImpl, uint64le_eq_impl, uint64leImpl, withTake1_gmap]

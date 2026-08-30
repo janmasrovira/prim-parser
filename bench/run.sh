@@ -11,7 +11,7 @@
 # hyperfine times the binaries per workload (comparing the two, or just REF_A).
 #
 # Tunables (environment variables):
-#   WORKLOADS  space-separated subset of "json arith csv" (default: all)
+#   WORKLOADS  space-separated subset of "json arith csv bytes" (default: all)
 #   SIZE       problem size per workload (default: 2000)
 #   ITERS      reparses per process invocation (default: 200)
 #   WARMUP     hyperfine warmup runs (default: 3)
@@ -36,7 +36,7 @@ REF_B="${2-main}"
 SINGLE=0
 case "$REF_B" in ""|"-") SINGLE=1 ;; esac
 
-WORKLOADS="${WORKLOADS:-json arith csv}"
+WORKLOADS="${WORKLOADS:-json arith csv bytes}"
 SIZE="${SIZE:-2000}"
 ITERS="${ITERS:-200}"
 WARMUP="${WARMUP:-3}"
