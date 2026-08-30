@@ -22,6 +22,10 @@ name = "bench"
 srcDir = "bench"
 root = "Bench"
 
+[[lean_exe]]
+name = "json-test-suite"
+root = "Tests.JsonTestSuite"
+
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"

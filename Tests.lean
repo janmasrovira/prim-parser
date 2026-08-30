@@ -7,3 +7,4 @@ import Tests.Examples.SExp
 import Tests.Examples.Lambda
 import Tests.Examples.Lexer
 import Tests.Byte
+import Tests.Json

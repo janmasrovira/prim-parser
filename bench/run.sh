@@ -11,7 +11,8 @@
 # hyperfine times the binaries per workload (comparing the two, or just REF_A).
 #
 # Tunables (environment variables):
-#   WORKLOADS  space-separated subset of "json arith csv bytes" (default: all)
+#   WORKLOADS  space-separated subset of "json json-file arith csv bytes" (default: all)
+#   JSON_FILE  fixture for json-file (default: bench/data/citm_catalog.json)
 #   SIZE       problem size per workload (default: 2000)
 #   ITERS      reparses per process invocation (default: 200)
 #   WARMUP     hyperfine warmup runs (default: 3)
@@ -36,7 +37,8 @@ REF_B="${2-main}"
 SINGLE=0
 case "$REF_B" in ""|"-") SINGLE=1 ;; esac
 
-WORKLOADS="${WORKLOADS:-json arith csv bytes}"
+WORKLOADS="${WORKLOADS:-json json-file arith csv bytes}"
+JSON_FILE="${JSON_FILE:-$BENCH_DIR/data/citm_catalog.json}"
 SIZE="${SIZE:-2000}"
 ITERS="${ITERS:-200}"
 WARMUP="${WARMUP:-3}"
@@ -125,12 +127,26 @@ fi
 for wl in $WORKLOADS; do
   echo
   echo "--- workload: $wl ---"
-  cmds=( --command-name "$REF_A [$wl]" "$EXE_A $wl $SIZE $ITERS" )
+  if [ "$wl" = "json-file" ]; then
+    command_a="$EXE_A $wl $JSON_FILE $ITERS"
+  else
+    command_a="$EXE_A $wl $SIZE $ITERS"
+  fi
+  cmds=( --command-name "$REF_A [$wl]" "$command_a" )
   if [ "$SINGLE" = 1 ]; then
     out="$RESULTS_DIR/$(slug "$REF_A")_${wl}"
   else
     out="$RESULTS_DIR/$(slug "$REF_A")_vs_$(slug "$REF_B")_${wl}"
-    cmds+=( --command-name "$REF_B [$wl]" "$EXE_B $wl $SIZE $ITERS" )
+    if [ "$wl" = "json-file" ]; then
+      command_b="$EXE_B $wl $JSON_FILE $ITERS"
+    else
+      command_b="$EXE_B $wl $SIZE $ITERS"
+    fi
+    if [ "$wl" != "json-file" ] || "$EXE_B" json-file "$JSON_FILE" 1 >/dev/null 2>&1; then
+      cmds+=( --command-name "$REF_B [$wl]" "$command_b" )
+    else
+      echo "note: $REF_B has no json-file workload; benchmarking $REF_A only"
+    fi
   fi
   hyperfine --warmup "$WARMUP" --runs "$RUNS" \
     "${cmds[@]}" --export-markdown "${out}.md" --export-json "${out}.json"

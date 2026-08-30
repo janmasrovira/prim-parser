@@ -3,11 +3,13 @@ Benchmark harness (root of the `bench` executable, copied per ref by run.sh).
 Uses only API stable across the refs being compared.
 
   bench <workload: json|arith|csv|bytes> <size> <iters>
+  bench json-file <path> <iters>
 -/
 import Examples.Json
 import Examples.Arith
 import Examples.Csv
 import PrimParser.Byte
+import PrimParser.Json
 
 open Parser Parser.Utf8 Parser.Byte
 
@@ -54,6 +56,16 @@ def benchJson (size iters : Nat) : Nat :=
       | _ => 0
     | Parser.failure _ => 0
 
+def benchJsonFile (input : ByteArray) (iters : Nat) : Nat :=
+  let t := Input.ofByteArray input
+  loop iters fun _ =>
+    match Parser.Json.json.run t with
+    | Parser.success r => match r.result with
+      | .object members => members.length
+      | .array values => values.length
+      | _ => 1
+    | Parser.failure _ => 0
+
 def benchArith (size iters : Nat) : Nat :=
   let t := toInput (genArith size)
   loop iters fun _ =>
@@ -77,13 +89,22 @@ def benchBytes (size iters : Nat) : Nat :=
 
 def main (args : List String) : IO Unit := do
   let workload := args[0]?.getD "json"
-  let size := (args[1]?.bind String.toNat?).getD 1000
-  let iters := (args[2]?.bind String.toNat?).getD 100
-  let tally ←
-    match workload with
-    | "json"  => pure (benchJson size iters)
-    | "arith" => pure (benchArith size iters)
-    | "csv"   => pure (benchCsv size iters)
-    | "bytes" => pure (benchBytes size iters)
-    | other   => throw (IO.userError s!"unknown workload: {other}")
-  IO.println s!"{workload} size={size} iters={iters} tally={tally}"
+  if workload == "json-file" then
+    let path := System.FilePath.mk <| args[1]?.getD "bench/data/citm_catalog.json"
+    let iters := (args[2]?.bind String.toNat?).getD 100
+    let input ← IO.FS.readBinFile path
+    let tally := benchJsonFile input iters
+    if tally == 0 then
+      throw (IO.userError s!"failed to parse JSON fixture: {path}")
+    IO.println s!"{workload} file={path} bytes={input.size} iters={iters} tally={tally}"
+  else
+    let size := (args[1]?.bind String.toNat?).getD 1000
+    let iters := (args[2]?.bind String.toNat?).getD 100
+    let tally ←
+      match workload with
+      | "json"  => pure (benchJson size iters)
+      | "arith" => pure (benchArith size iters)
+      | "csv"   => pure (benchCsv size iters)
+      | "bytes" => pure (benchBytes size iters)
+      | other   => throw (IO.userError s!"unknown workload: {other}")
+    IO.println s!"{workload} size={size} iters={iters} tally={tally}"
