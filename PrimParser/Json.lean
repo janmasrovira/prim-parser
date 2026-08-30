@@ -77,8 +77,8 @@ def number : Utf8Parser Error conditional Number := gdo
   return Number.mk (sign.getD "" ++ integer ++ fraction.getD "" ++ exponent.getD "")
   grade_by by simp
 
-@[inline] private def unescapedChar : Utf8Parser Error conditional String :=
-  Char.toString <$>ᵍ satisfy (fun c => c.val ≥ 0x20 && c != '\"' && c != '\\')
+@[inline] private def unescapedChars : Utf8Parser Error conditional String :=
+  takeWhile1 (fun c => c.val ≥ 0x20 && c != '\"' && c != '\\')
 
 private def simpleEscape : Utf8Parser Error conditional String :=
   Char.toString <$>ᵍ token fun
@@ -127,7 +127,7 @@ private def escapedChar : Utf8Parser Error conditional String := gdo
 
 def string : Utf8Parser Error conditional String := gdo
   char '\"'
-  let chunks ← many (unescapedChar <|> escapedChar)
+  let chunks ← many (unescapedChars <|> escapedChar)
   char '\"'
   return chunks.foldl (· ++ ·) ""
   grade_by by simp
