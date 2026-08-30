@@ -77,8 +77,8 @@ def number : Utf8Parser Error conditional Number := gdo
   return Number.mk (sign.getD "" ++ integer ++ fraction.getD "" ++ exponent.getD "")
   grade_by by simp
 
-@[inline] private def unescapedChars : Utf8Parser Error conditional String :=
-  takeWhile1 (fun c => c.val ≥ 0x20 && c != '\"' && c != '\\')
+@[inline] private def isUnescaped (c : Char) : Bool :=
+  c.val ≥ 0x20 && c != '\"' && c != '\\'
 
 private def simpleEscape : Utf8Parser Error conditional String :=
   Char.toString <$>ᵍ token fun
@@ -125,12 +125,52 @@ private def escapedChar : Utf8Parser Error conditional String := gdo
   char '\\'
   simpleEscape <|> unicodeEscape
 
+private def stringBodyGo {n : Nat} (t : Input ByteArray n) (acc : String) :
+    Outcome Error n always String :=
+  let chunk := t.takeWhile isUnescaped
+  let m := n - chunk.utf8ByteSize
+  have hm : m ≤ n := Nat.sub_le n chunk.utf8ByteSize
+  let rest := t.dropTo m hm
+  match h : rest.nextTok (τ := Char) with
+  | none => failure { error := Error.eof, restSize := m }
+  | some c =>
+    if c == '\"' then
+      success {
+        result := acc ++ chunk
+        restSize := m - c.utf8Size
+        witness := by
+          have hc := rest.width_le h
+          simp only [Reader.width_byteArray] at hc
+          have hp := Char.utf8Size_pos c
+          omega }
+    else if c == '\\' then
+      match he : escapedChar.run rest with
+      | .failure e => failure (e.trans hm)
+      | .success e =>
+        have he_lt : e.restSize < n := by
+          have := e.witness
+          omega
+        match stringBodyGo (rest.dropTo e.restSize e.le) (acc ++ chunk ++ e.result) with
+        | .failure f => failure (f.trans (Nat.le_trans e.le hm))
+        | .success r => success {
+          result := r.result
+          restSize := r.restSize
+          witness := by
+            have hr := r.witness
+            omega }
+    else
+      failure {
+        error := Error.fail
+        restSize := m - c.utf8Size
+        witness := by omega }
+termination_by n
+
+private def stringBody : Utf8Parser Error conditional String where
+  run t := stringBodyGo t ""
+
 def string : Utf8Parser Error conditional String := gdo
   char '\"'
-  let chunks ← many (unescapedChars <|> escapedChar)
-  char '\"'
-  return chunks.foldl (· ++ ·) ""
-  grade_by by simp
+  stringBody
 
 @[inline] private def nullValue : Utf8Parser Error conditional Value :=
   Value.null <$ᵍ keyword "null"
