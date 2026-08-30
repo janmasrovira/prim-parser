@@ -25,16 +25,9 @@ def runBytesOption (p : ByteParser ε ⟨ge, gc⟩ α) (b : ByteArray) : Option 
 
 namespace Byte
 
--- TODO csimp
 /-- Consume exactly `k + 1` bytes. -/
-def take1 (k : Nat) : ByteParser Error conditional ByteArray where
-  run {n} t :=
-    if h : k < n then
-      success { result := t.buf.extract t.pos (t.pos + k + 1)
-                restSize := n - (k + 1) }
-    else
-      failure { error := Error.eof
-                restSize := n }
+def take1 (k : Nat) : ByteParser Error conditional ByteArray :=
+  (·.toList.toByteArray) <$>ᵍ count1 k anyTok
 
 private theorem pos_add_le {m : Nat} (t : Input ByteArray UInt8 n) (h : m + 1 ≤ n)
   : t.pos + m + 1 ≤ t.buf.size := by
@@ -190,27 +183,27 @@ private theorem withTake1_bind {j k : Nat}
       let x ← withTake1 j decodeFst
       let y ← withTake1 k decodeSnd
       return combine x y)
-    = withTake1 (j + k + 1) fun b =>
+    = withTake1 (k + j + 1) fun b =>
         combine (decodeFst (b.narrow 0 (j + 1))) (decodeSnd (b.narrow (j + 1) (k + 1))) := by
   ext n t
   simp only [gbind_run, Success.bindParser]
   by_cases hj : j + 1 ≤ n
   case neg =>
     rw [Outcome.handle_failure withTake1_run_eof,
-        withTake1_run_eof (k := j + k + 1) (by omega)]
+        withTake1_run_eof (k := k + j + 1) (by omega)]
   case pos =>
     rw [Outcome.handle_success withTake1_run_success]
     by_cases hk : k + 1 ≤ n - (j + 1)
     case neg =>
       rw [Outcome.handle_failure withTake1_run_eof,
-          withTake1_run_eof (k := j + k + 1) (by omega)]
+          withTake1_run_eof (k := k + j + 1) (by omega)]
       rfl
     case pos =>
       have hpos : (t.dropTo (n - (j + 1))).pos = t.pos + j + 1 := by
         simp only [Input.pos_dropTo]; omega
-      have hrest : n - (j + 1) - (k + 1) = n - (j + k + 2) := by omega
+      have hrest : n - (j + 1) - (k + 1) = n - (k + j + 2) := by omega
       rw [Outcome.handle_success withTake1_run_success,
-          withTake1_run_success (k := j + k + 1) (by omega)]
+          withTake1_run_success (k := k + j + 1) (by omega)]
       simp only [gpure_run, Success.seq, Input.dropTo_buf, hpos, hrest]
       rfl
 
@@ -221,6 +214,32 @@ private theorem withTake1_gmap {k : Nat}
   ext n t
   simp only [gmap_run, withTake1]
   split <;> rfl
+
+private def windowVec : (k : Nat) → BytesWindow (k + 1) → List.Vector UInt8 (k + 1)
+  | 0, w => w[0] ::ᵥ .nil
+  | k + 1, w => w[0] ::ᵥ windowVec k (w.narrow 1 (k + 1))
+
+private theorem count1_anyTok_eq (k : Nat) : count1 k anyTok = withTake1 k (windowVec k) := by
+  induction k with
+  | zero => rw [count1, anyTok_eq_withTake1, withTake1_gmap]; rfl
+  | succ k ih => rw [count1_succ, ih, anyTok_eq_withTake1, withTake1_bind]; rfl
+
+private theorem windowVec_toByteArray : (k : Nat) → (w : BytesWindow (k + 1)) →
+    (windowVec k w).toList.toByteArray = w.toByteArray
+  | 0, w => by
+    rw [BytesWindow.toByteArray_succ]
+    simp [windowVec, BytesWindow.toByteArray]
+  | k + 1, w => by
+    rw [BytesWindow.toByteArray_succ, windowVec, List.Vector.toList_cons, ← List.singleton_append,
+        List.toByteArray_append, windowVec_toByteArray k]
+
+private def take1Impl (k : Nat) : ByteParser Error conditional ByteArray :=
+  withTake1 k BytesWindow.toByteArray
+
+@[csimp] private theorem take1_eq_impl : @take1 = @take1Impl := by
+  funext k
+  rw [take1, count1_anyTok_eq, withTake1_gmap, take1Impl]
+  exact congrArg (withTake1 k) (funext (windowVec_toByteArray k))
 
 private abbrev be16 (b : BytesWindow 2) : UInt16 :=
   b[0].toUInt16 <<< 8 ||| b[1].toUInt16

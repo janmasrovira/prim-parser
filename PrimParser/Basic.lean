@@ -827,6 +827,9 @@ def count1
       return (x ::ᵥ rest)
       grade_by by simp
 
+theorem count1_succ (n : Nat) (p : Parser σ τ ε conditional α)
+  : count1 (n + 1) p = (p >>=ᵍ fun x => count1 n p >>=ᵍ fun rest => gpure (x ::ᵥ rest)) := rfl
+
 /-- Parse exactly `n` occurrences of `p`. -/
 def count
   (n : Nat)

@@ -29,11 +29,9 @@ def genCsv (n : Nat) : String :=
   String.intercalate "\n" ((List.range (max 1 n)).map (fun i =>
     s!"a{i},b{i},c{i}"))
 
-/-- `n` records of 21 bytes, filled with a cheap deterministic pattern. -/
 def genBytes (n : Nat) : ByteArray :=
   ((List.range (21 * max 1 n)).map (fun i => UInt8.ofNat (i * 7 % 251))).toByteArray
 
-/-- One 21-byte record, touching both the fused and the mapped readers. -/
 def record : ByteParser Error conditional UInt64 := gdo
   let a ← uint8
   let b ← uint16be

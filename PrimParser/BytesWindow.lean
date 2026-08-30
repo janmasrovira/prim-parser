@@ -27,4 +27,14 @@ abbrev BytesWindow.narrow
   start := b.start + offset
   valid := by have := b.valid; omega
 
+def BytesWindow.toByteArray (b : BytesWindow w) : ByteArray :=
+  b.buf.extract b.start (b.start + w)
+
+theorem BytesWindow.toByteArray_succ (b : BytesWindow (w + 1))
+  : b.toByteArray = [b[0]].toByteArray ++ (b.narrow 1 w).toByteArray := by
+  have := b.valid
+  simp [toByteArray, getElem_def]
+  rw [← ByteArray.extract_add_one (i := b.start) (by omega), ByteArray.extract_append_extract]
+  congr <;> omega
+
 end Parser
