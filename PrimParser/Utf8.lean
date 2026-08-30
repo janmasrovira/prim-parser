@@ -1,6 +1,6 @@
 import PrimParser.Basic
 
-open Buffer
+open Buffer Reader
 
 /-!
 # UTF-8 Character parsers
@@ -76,7 +76,7 @@ def takeWhile1 (f : Char → Bool) : Utf8Parser Error conditional String :=
         success { result := s
                   restSize := n + 1 - s.utf8ByteSize }
       else
-        match hd : t.nextTok with
+        match hd : t.nextTok (τ := Char) with
         | some c =>
           failure { error := Error.fail
                     restSize := n + 1 - c.utf8Size }
@@ -109,7 +109,7 @@ def skipWhile1 (f : Char → Bool) : Utf8Parser Error conditional PUnit :=
         success { result := ()
                   restSize := r.val }
       else
-        match hd : t.nextTok with
+        match hd : t.nextTok (τ := Char) with
         | some c =>
           failure { error := Error.fail
                     restSize := n + 1 - c.utf8Size }
@@ -119,7 +119,7 @@ def skipWhile1 (f : Char → Bool) : Utf8Parser Error conditional PUnit :=
 
 theorem many_go_satisfy_restSize
   (f : Char → Bool)
-  (t : Input ByteArray Char n)
+  (t : Input ByteArray n)
   : (many.go (satisfy f) t).restSize = (Input.skipWhile f t).val := by
   fun_induction Input.skipWhile f t <;> rw [many.go]
   case case1 => rw [satisfy_run_accept]; assumption
@@ -137,14 +137,14 @@ private theorem ofList_eq_foldl (l : List Char) : String.ofList l = l.foldl Stri
     simp only [List.foldl_cons, ih, String.push_eq_append, String.ofList_cons,
                String.append_assoc]
 
-private theorem takeWhile_go_eq (f : Char → Bool) (t : Input ByteArray Char n) (acc : String)
+private theorem takeWhile_go_eq (f : Char → Bool) (t : Input ByteArray n) (acc : String)
   : Input.takeWhile.go f t acc = (many.go (satisfy f) t).result.foldl String.push acc := by
   fun_induction Input.takeWhile.go f t acc <;> rw [many.go]
   case case1 => rw [satisfy_run_accept]; simp_all [width_byteArray]; rfl
   case case2 => simp_all [satisfy_run_reject]
   case case3 => simp_all [satisfy_run_eof]
 
-theorem many_go_satisfy_result (f : Char → Bool) (t : Input ByteArray Char n)
+theorem many_go_satisfy_result (f : Char → Bool) (t : Input ByteArray n)
   : String.ofList (many.go (satisfy f) t).result = Input.takeWhile f t := by
   rw [ofList_eq_foldl, Input.takeWhile, takeWhile_go_eq]
 
@@ -166,7 +166,7 @@ private theorem many1_satisfy_eq (f : Char → Bool)
 
 section
 
-variable {f : Char → Bool} {c : Char} {t : Input ByteArray Char n}
+variable {f : Char → Bool} {c : Char} {t : Input ByteArray n}
 
 theorem takeWhile1_run_accept
   (h : t.nextTok = some c := by assumption)
@@ -214,7 +214,7 @@ end
 
 section
 
-variable {f : Char → Bool} {c : Char} {t : Input ByteArray Char n}
+variable {f : Char → Bool} {c : Char} {t : Input ByteArray n}
 
 theorem skipWhile1_run_accept
   (h : t.nextTok = some c)

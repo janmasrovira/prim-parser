@@ -10,7 +10,7 @@ Lawful instances for `Success`, `Outcome`, and `Parser`:
 namespace Parser
 
 variable
-  {σ τ : Type} [Buffer σ τ]
+  {σ τ : Type} [Buffer σ] [Reader σ τ]
   {α β γ ε : Type}
   {n m : Nat}
   {g g' : Grade}
@@ -39,7 +39,7 @@ theorem heq
   {p : Parser σ τ ε g1 α}
   {q : Parser σ τ ε g2 α}
   (hg : g1 = g2)
-  (h : ∀ {m} (t : Input σ τ m), p.run t ≍ q.run t)
+  (h : ∀ {m} (t : Input σ m), p.run t ≍ q.run t)
   : p ≍ q := by
   subst hg; apply heq_of_eq; ext m t; exact eq_of_heq (h t)
 
@@ -95,7 +95,7 @@ theorem Outcome.success_congr
 theorem bind_run
   (m : Parser σ τ ε g α)
   (f : α → Parser σ τ ε g' β)
-  (t : Input σ τ n)
+  (t : Input σ n)
   : (bind m f).run t
       = match m.run t with
         | failure e => failure e

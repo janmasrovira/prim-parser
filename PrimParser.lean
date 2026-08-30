@@ -7,4 +7,5 @@ import PrimParser.Input
 import PrimParser.Necessity
 import PrimParser.NonEmptyList
 import PrimParser.Properties
+import PrimParser.Reader
 import PrimParser.Utf8
