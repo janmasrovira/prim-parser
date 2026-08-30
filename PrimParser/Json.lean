@@ -76,6 +76,61 @@ def number : Utf8Parser Error conditional Number := gdo
   return ⟨sign.getD "" ++ integer ++ fraction.getD "" ++ exponent.getD ""⟩
   grade_by by simp
 
+private def unescapedChar : Utf8Parser Error conditional String :=
+  Char.toString <$>ᵍ satisfy (fun c => c.val ≥ 0x20 && c != '\"' && c != '\\')
+
+private def simpleEscape : Utf8Parser Error conditional String :=
+  Char.toString <$>ᵍ token fun
+    | '\"' => some '\"'
+    | '\\' => some '\\'
+    | '/' => some '/'
+    | 'b' => some (Char.ofNat 8)
+    | 'f' => some (Char.ofNat 12)
+    | 'n' => some '\n'
+    | 'r' => some '\r'
+    | 't' => some '\t'
+    | _ => none
+
+private def hexQuad : Utf8Parser Error conditional Nat := gdo
+  let a ← ASCII.hexDigit
+  let b ← ASCII.hexDigit
+  let c ← ASCII.hexDigit
+  let d ← ASCII.hexDigit
+  return a.val * 0x1000 + b.val * 0x100 + c.val * 0x10 + d.val
+
+private def decodedCodeUnit (first : Nat) : Utf8Parser Error fallible String :=
+  if first ≥ 0xD800 && first ≤ 0xDBFF then
+    weaken <| gdo
+      char '\\'
+      char 'u'
+      let second ← hexQuad
+      if second ≥ 0xDC00 && second ≤ 0xDFFF then
+        let scalar := 0x10000 + (first - 0xD800) * 0x400 + (second - 0xDC00)
+        ok (ge := possibly) (gc := possibly) (Char.ofNat scalar).toString
+      else
+        throw (ge := possibly) (gc := possibly) Error.fail
+  else if first ≥ 0xDC00 && first ≤ 0xDFFF then
+    throw (ge := possibly) (gc := possibly) Error.fail
+  else
+    ok (ge := possibly) (gc := possibly) (Char.ofNat first).toString
+
+private def unicodeEscape : Utf8Parser Error conditional String := gdo
+  char 'u'
+  let first ← hexQuad
+  decodedCodeUnit first
+  grade_by by simp
+
+private def escapedChar : Utf8Parser Error conditional String := gdo
+  char '\\'
+  simpleEscape <|> unicodeEscape
+
+def string : Utf8Parser Error conditional String := gdo
+  char '\"'
+  let chunks ← many (unescapedChar <|> escapedChar)
+  char '\"'
+  return chunks.foldl (· ++ ·) ""
+  grade_by by simp
+
 private def nullValue : Utf8Parser Error conditional Value :=
   Value.null <$ᵍ keyword "null"
 
@@ -88,16 +143,40 @@ private def falseValue : Utf8Parser Error conditional Value :=
 private def numberValue : Utf8Parser Error conditional Value :=
   Value.number <$>ᵍ lexeme number
 
-private def primitive : Utf8Parser Error conditional Value :=
-  oneOf (nullValue ::₁ [trueValue, falseValue, numberValue])
+private def stringValue : Utf8Parser Error conditional Value :=
+  Value.string <$>ᵍ lexeme string
 
-/-- Parse exactly one complete JSON document. Strings, arrays, and objects are
-added in subsequent implementation steps. -/
+private def primitive : Utf8Parser Error conditional Value :=
+  oneOf (nullValue ::₁ [trueValue, falseValue, numberValue, stringValue])
+
+/-- Parse one JSON value and its trailing JSON whitespace. Object members are
+kept in source order; in particular, duplicate names are not discarded. -/
+def value : Utf8Parser Error conditional Value :=
+  fix fun value =>
+    let arrayValue : Utf8Parser Error conditional Value := gdo
+      lexeme (char '[')
+      let values ← sepBy (lexeme (char ',')) value
+      lexeme (char ']')
+      return .array values
+    let member : Utf8Parser Error conditional (String × Value) := gdo
+      let name ← lexeme string
+      lexeme (char ':')
+      let memberValue ← value
+      return (name, memberValue)
+    let objectValue : Utf8Parser Error conditional Value := gdo
+      lexeme (char '{')
+      let members ← sepBy (lexeme (char ',')) member
+      lexeme (char '}')
+      return .object members
+    oneOf (nullValue ::₁
+      [trueValue, falseValue, numberValue, stringValue, arrayValue, objectValue])
+
+/-- Parse exactly one complete JSON document. -/
 def document : Utf8Parser Error conditional Value := gdo
   whitespace
-  let value ← primitive
+  let result ← value
   eof
-  return value
+  return result
   grade_by by simp
 
 end Parser.Json
