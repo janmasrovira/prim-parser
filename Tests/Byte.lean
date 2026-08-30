@@ -50,6 +50,34 @@ private def restAfterOne : ByteParser Error conditional ByteArray := gdo
 #guard int64be.runBytesOption (bs [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]) == some (-1)
 #guard int64le.runBytesOption (bs [1, 0, 0, 0, 0, 0, 0, 0]) == some 1
 
+private def skipThenUint32be : ByteParser Error conditional UInt32 := gdo
+  let _ ← uint8
+  uint32be
+
+#guard skipThenUint32be.runBytesOption (bs [0xEE, 0x12, 0x34, 0x56, 0x78]) == some 0x12345678
+
+private def uint16beTwice : ByteParser Error conditional (UInt16 × UInt16) := gdo
+  let a ← uint16be
+  let b ← uint16be
+  return (a, b)
+  grade_by by simp
+
+#guard uint16beTwice.runBytesOption (bs [0, 1, 0, 2]) == some (1, 2)
+
+private def uint64beThenRest : ByteParser Error conditional (UInt64 × ByteArray) := gdo
+  let a ← uint64be
+  let r ← takeRest
+  return (a, r)
+  grade_by by simp
+
+#guard uint64beThenRest.runBytesOption (bs [1, 2, 3, 4, 5, 6, 7, 8, 0xAA])
+  == some (0x0102030405060708, bs [0xAA])
+
+private def uint32beOrByte : ByteParser Error conditional UInt32 :=
+  uint32be <|> (UInt8.toUInt32 <$>ᵍ uint8)
+
+#guard uint32beOrByte.runBytesOption (bs [0x12, 0x34, 0x56]) == some 0x12
+
 -- a length-prefixed record
 private def record : ByteParser Error conditional (UInt32 × ByteArray) := gdo
   let len ← uint32be

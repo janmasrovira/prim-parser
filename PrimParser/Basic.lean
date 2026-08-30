@@ -366,6 +366,9 @@ instance : GradedApplicative (Parser σ τ ε) where
 instance : GradedMonad (Parser σ τ ε) where
   gbind := bind
 
+theorem gmap_run (f : α → β) (p : Parser σ τ ε g α) (t : Input σ τ n)
+  : (f <$>ᵍ p).run t = f <$> p.run t := rfl
+
 theorem gbind_run (m : Parser σ τ ε g α) (k : α → Parser σ τ ε g' β) (t : Input σ τ n)
   : (m >>=ᵍ k).run t
     = (m.run t).handle (m.sound t) (fun _ x => x.bindParser t k) (fun _ e => failure e) := rfl
