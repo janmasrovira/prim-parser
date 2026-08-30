@@ -59,7 +59,7 @@ def benchJson (size iters : Nat) : Nat :=
 def benchJsonFile (input : ByteArray) (iters : Nat) : Nat :=
   let t := Input.ofByteArray input
   loop iters fun _ =>
-    match Parser.Json.document.run t with
+    match Parser.Json.json.run t with
     | Parser.success r => match r.result with
       | .object members => members.length
       | .array values => values.length

@@ -167,8 +167,8 @@ def value : Utf8Parser Error conditional Value :=
     oneOf (nullValue ::₁
       [trueValue, falseValue, numberValue, stringValue, arrayValue, objectValue])
 
-/-- Parse exactly one complete JSON document. -/
-def document : Utf8Parser Error conditional Value := gdo
+/-- Parse a JSON document. -/
+def json : Utf8Parser Error conditional Value := gdo
   whitespace
   let result ← value
   eof

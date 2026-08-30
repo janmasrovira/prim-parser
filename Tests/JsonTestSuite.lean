@@ -9,7 +9,7 @@ private structure Counts where
   implementationRejected : Nat := 0
 
 private def accepts (input : ByteArray) : Bool :=
-  match document.runOn (Input.ofByteArray input) with
+  match json.runOn (Input.ofByteArray input) with
   | .ok _ => true
   | .error _ => false
 
