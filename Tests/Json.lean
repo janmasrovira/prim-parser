@@ -2,6 +2,11 @@ import PrimParser.Json
 
 open Parser Parser.Utf8 Parser.Json
 
+private def parsedNumber (raw : String) : Value :=
+  match document.runOption raw with
+  | some value => value
+  | none => .null
+
 -- Literals and exact document boundaries.
 #guard document.runOption "null" == some .null
 #guard document.runOption " true\r\n" == some (.bool true)
@@ -9,11 +14,13 @@ open Parser Parser.Utf8 Parser.Json
 #guard document.runOption "" == none
 
 -- Complete RFC 8259 number grammar.
-#guard document.runOption "0" == some (.number ⟨"0"⟩)
-#guard document.runOption "-0" == some (.number ⟨"-0"⟩)
-#guard document.runOption "123" == some (.number ⟨"123"⟩)
-#guard document.runOption "-12.34e+56" == some (.number ⟨"-12.34e+56"⟩)
-#guard document.runOption "1E-9" == some (.number ⟨"1E-9"⟩)
+#guard (document.runOption "0").map (fun | .number n => some n.raw | _ => none) == some (some "0")
+#guard (document.runOption "-0").map (fun | .number n => some n.raw | _ => none) == some (some "-0")
+#guard (document.runOption "123").map (fun | .number n => some n.raw | _ => none) == some (some "123")
+#guard (document.runOption "-12.34e+56").map (fun | .number n => some n.raw | _ => none) ==
+  some (some "-12.34e+56")
+#guard (document.runOption "1E-9").map (fun | .number n => some n.raw | _ => none) ==
+  some (some "1E-9")
 
 -- Invalid number forms represented by JSONTestSuite's `n_number_*` cases.
 #guard document.runOption "01" == none
@@ -26,7 +33,8 @@ open Parser Parser.Utf8 Parser.Json
 #guard document.runOption "--1" == none
 
 -- RFC whitespace is deliberately narrower than Unicode whitespace.
-#guard document.runOption "\t\n\r 0 \r\n\t" == some (.number ⟨"0"⟩)
+#guard (document.runOption "\t\n\r 0 \r\n\t").map (fun | .number n => some n.raw | _ => none) ==
+  some (some "0")
 #guard document.runOption (String.singleton (Char.ofNat 11) ++ "0") == none
 
 -- Strings and the eight short escapes.
@@ -55,18 +63,21 @@ open Parser Parser.Utf8 Parser.Json
 -- Arrays, including heterogeneous and recursive values.
 #guard document.runOption "[]" == some (.array [])
 #guard document.runOption "[null,true,-2.5,\"x\"]" == some (.array
-  [.null, .bool true, .number ⟨"-2.5"⟩, .string "x"])
+  [.null, .bool true, parsedNumber "-2.5", .string "x"])
 #guard document.runOption "[[],[{}]]" == some (.array
   [.array [], .array [.object []]])
+#guard document.runOption "[ \n 1 ,\t 2 \r]" == some (.array
+  [parsedNumber "1", parsedNumber "2"])
 
 -- Objects preserve member order and duplicate names.
 #guard document.runOption "{}" == some (.object [])
 #guard document.runOption "{\"a\":1,\"b\":[false]}" == some (.object
-  [("a", .number ⟨"1"⟩), ("b", .array [.bool false])])
+  [("a", parsedNumber "1"), ("b", .array [.bool false])])
 #guard document.runOption "{\"a\":1,\"a\":2}" == some (.object
-  [("a", .number ⟨"1"⟩), ("a", .number ⟨"2"⟩)])
+  [("a", parsedNumber "1"), ("a", parsedNumber "2")])
 #guard document.runOption " { \"nested\" : { \"ok\" : true } } " == some (.object
   [("nested", .object [("ok", .bool true)])])
+#guard document.runOption "{\"\\u0061\":null}" == some (.object [("a", .null)])
 
 -- Separators and delimiters are strict.
 #guard document.runOption "[1,]" == none
@@ -80,3 +91,4 @@ open Parser Parser.Utf8 Parser.Json
 #guard document.runOption "{\"a\":}" == none
 #guard document.runOption "{1:true}" == none
 #guard document.runOption "{" == none
+#guard document.runOption "{\"a\":[1,2}" == none

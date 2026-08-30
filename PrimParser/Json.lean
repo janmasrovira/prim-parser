@@ -2,14 +2,13 @@ import PrimParser.Utf8
 
 open Parser Parser.Utf8
 
-/-! An RFC 8259 JSON parser, developed independently from the intentionally
-simplified parser in `Examples.Json`. -/
+/-! A [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) JSON parser. -/
 
 namespace Parser.Json
 
-/-- JSON numbers are retained exactly as written. This avoids silently losing
-precision and lets applications choose their own numeric representation. -/
+/-- Built only with `number` parser. -/
 structure Number where
+  private mk ::
   raw : String
   deriving Repr, BEq
 
@@ -35,6 +34,9 @@ private def lexeme {α : Type} {ge gc : Necessity}
   whitespace
   return result
   grade_by by simp
+
+@[inline] private def symbol (c : Char) : Utf8Parser Error conditional PUnit :=
+  lexeme (char c)
 
 private def keyword (word : String) (h : word ≠ "" := by decide) :
     Utf8Parser Error conditional PUnit :=
@@ -67,13 +69,12 @@ private def exponentPart : Utf8Parser Error conditional String := gdo
   let signText := (sign.map Char.toString).getD ""
   return marker.toString ++ signText ++ digits
 
-/-- Parse the complete grammar for an RFC 8259 number. -/
 def number : Utf8Parser Error conditional Number := gdo
   let sign ← optional ("-" <$ᵍ char '-')
   let integer ← integerPart
   let fraction ← optional fractionPart
   let exponent ← optional exponentPart
-  return ⟨sign.getD "" ++ integer ++ fraction.getD "" ++ exponent.getD ""⟩
+  return Number.mk (sign.getD "" ++ integer ++ fraction.getD "" ++ exponent.getD "")
   grade_by by simp
 
 private def unescapedChar : Utf8Parser Error conditional String :=
@@ -146,27 +147,22 @@ private def numberValue : Utf8Parser Error conditional Value :=
 private def stringValue : Utf8Parser Error conditional Value :=
   Value.string <$>ᵍ lexeme string
 
-private def primitive : Utf8Parser Error conditional Value :=
-  oneOf (nullValue ::₁ [trueValue, falseValue, numberValue, stringValue])
-
-/-- Parse one JSON value and its trailing JSON whitespace. Object members are
-kept in source order; in particular, duplicate names are not discarded. -/
 def value : Utf8Parser Error conditional Value :=
   fix fun value =>
     let arrayValue : Utf8Parser Error conditional Value := gdo
-      lexeme (char '[')
-      let values ← sepBy (lexeme (char ',')) value
-      lexeme (char ']')
+      symbol '['
+      let values ← sepBy (symbol ',') value
+      symbol ']'
       return .array values
     let member : Utf8Parser Error conditional (String × Value) := gdo
       let name ← lexeme string
-      lexeme (char ':')
+      symbol ':'
       let memberValue ← value
       return (name, memberValue)
     let objectValue : Utf8Parser Error conditional Value := gdo
-      lexeme (char '{')
-      let members ← sepBy (lexeme (char ',')) member
-      lexeme (char '}')
+      symbol '{'
+      let members ← sepBy (symbol ',') member
+      symbol '}'
       return .object members
     oneOf (nullValue ::₁
       [trueValue, falseValue, numberValue, stringValue, arrayValue, objectValue])
