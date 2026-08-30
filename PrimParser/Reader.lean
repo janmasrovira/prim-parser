@@ -2,7 +2,7 @@ import PrimParser.Buffer
 
 open Buffer
 
-/-- Reads tokens of type `t` from a buffer `σ`.
+/-- Reads tokens of type `τ` from a buffer `σ`.
 A token `t : τ` has a width of `width t` units. -/
 class Reader (σ τ : Type) [Buffer σ] where
   width : τ → Nat
