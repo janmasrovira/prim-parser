@@ -21,13 +21,13 @@ inductive Value where
   | object (members : List (String × Value))
   deriving Repr, BEq
 
-private def isWhitespace (c : Char) : Bool :=
+@[inline] private def isWhitespace (c : Char) : Bool :=
   c == ' ' || c == '\t' || c == '\n' || c == '\r'
 
-private def whitespace : Utf8Parser Error flexible PUnit :=
+@[inline] private def whitespace : Utf8Parser Error flexible PUnit :=
   skipWhile isWhitespace
 
-private def lexeme {α : Type} {ge gc : Necessity}
+@[inline] private def lexeme {α : Type} {ge gc : Necessity}
     (p : Utf8Parser Error ⟨ge, gc⟩ α) :
     Utf8Parser Error ⟨ge, gc ⊔ possibly⟩ α := gdo
   let result ← p
@@ -38,14 +38,14 @@ private def lexeme {α : Type} {ge gc : Necessity}
 @[inline] private def symbol (c : Char) : Utf8Parser Error conditional PUnit :=
   lexeme (char c)
 
-private def keyword (word : String) (h : word ≠ "" := by decide) :
+@[inline] private def keyword (word : String) (h : word ≠ "" := by decide) :
     Utf8Parser Error conditional PUnit :=
   lexeme (Utf8.string word h)
 
-private def asciiDigit (c : Char) : Bool :=
+@[inline] private def asciiDigit (c : Char) : Bool :=
   '0' ≤ c && c ≤ '9'
 
-private def nonzeroDigit (c : Char) : Bool :=
+@[inline] private def nonzeroDigit (c : Char) : Bool :=
   '1' ≤ c && c ≤ '9'
 
 private def nonzeroInteger : Utf8Parser Error conditional String := gdo
@@ -54,7 +54,7 @@ private def nonzeroInteger : Utf8Parser Error conditional String := gdo
   return first.toString ++ rest
   grade_by by simp
 
-private def integerPart : Utf8Parser Error conditional String :=
+@[inline] private def integerPart : Utf8Parser Error conditional String :=
   ("0" <$ᵍ char '0') <|> nonzeroInteger
 
 private def fractionPart : Utf8Parser Error conditional String := gdo
@@ -77,7 +77,7 @@ def number : Utf8Parser Error conditional Number := gdo
   return Number.mk (sign.getD "" ++ integer ++ fraction.getD "" ++ exponent.getD "")
   grade_by by simp
 
-private def unescapedChar : Utf8Parser Error conditional String :=
+@[inline] private def unescapedChar : Utf8Parser Error conditional String :=
   Char.toString <$>ᵍ satisfy (fun c => c.val ≥ 0x20 && c != '\"' && c != '\\')
 
 private def simpleEscape : Utf8Parser Error conditional String :=
@@ -132,19 +132,19 @@ def string : Utf8Parser Error conditional String := gdo
   return chunks.foldl (· ++ ·) ""
   grade_by by simp
 
-private def nullValue : Utf8Parser Error conditional Value :=
+@[inline] private def nullValue : Utf8Parser Error conditional Value :=
   Value.null <$ᵍ keyword "null"
 
-private def trueValue : Utf8Parser Error conditional Value :=
+@[inline] private def trueValue : Utf8Parser Error conditional Value :=
   Value.bool true <$ᵍ keyword "true"
 
-private def falseValue : Utf8Parser Error conditional Value :=
+@[inline] private def falseValue : Utf8Parser Error conditional Value :=
   Value.bool false <$ᵍ keyword "false"
 
-private def numberValue : Utf8Parser Error conditional Value :=
+@[inline] private def numberValue : Utf8Parser Error conditional Value :=
   Value.number <$>ᵍ lexeme number
 
-private def stringValue : Utf8Parser Error conditional Value :=
+@[inline] private def stringValue : Utf8Parser Error conditional Value :=
   Value.string <$>ᵍ lexeme string
 
 def value : Utf8Parser Error conditional Value :=
