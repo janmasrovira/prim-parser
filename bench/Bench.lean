@@ -2,13 +2,14 @@
 Benchmark harness (root of the `bench` executable, copied per ref by run.sh).
 Uses only API stable across the refs being compared.
 
-  bench <workload: json|arith|csv> <size> <iters>
+  bench <workload: json|arith|csv|bytes> <size> <iters>
 -/
 import Examples.Json
 import Examples.Arith
 import Examples.Csv
+import PrimParser.Byte
 
-open Parser Parser.Utf8
+open Parser Parser.Utf8 Parser.Byte
 
 /-- Build a length-indexed `Input` from a `String`. -/
 def toInput (s : String) : Input ByteArray Char s.toUTF8.size := Input.ofString s
@@ -27,6 +28,18 @@ def genArith (n : Nat) : String :=
 def genCsv (n : Nat) : String :=
   String.intercalate "\n" ((List.range (max 1 n)).map (fun i =>
     s!"a{i},b{i},c{i}"))
+
+def genBytes (n : Nat) : ByteArray :=
+  ((List.range (21 * max 1 n)).map (fun i => UInt8.ofNat (i * 7 % 251))).toByteArray
+
+def record : ByteParser Error conditional UInt64 := gdo
+  let a ← uint8
+  let b ← uint16be
+  let c ← uint32le
+  let d ← uint64be
+  let e ← int16be
+  let f ← int32le
+  return a.toUInt64 + b.toUInt64 + c.toUInt64 + d + e.toUInt16.toUInt64 + f.toUInt32.toUInt64
 
 /-- Run `body` `iters` times, summing the returned tallies (keeps the work live). -/
 def loop (iters : Nat) (body : Unit → Nat) : Nat :=
@@ -55,6 +68,13 @@ def benchCsv (size iters : Nat) : Nat :=
     | Parser.success r => r.result.fst
     | Parser.failure _ => 0
 
+def benchBytes (size iters : Nat) : Nat :=
+  let t := Input.ofByteArray (genBytes size)
+  loop iters fun _ =>
+    match (many record).run t with
+    | Parser.success r => (r.result.foldl (· + ·) 0).toNat % 1000000
+    | Parser.failure _ => 0
+
 def main (args : List String) : IO Unit := do
   let workload := args[0]?.getD "json"
   let size := (args[1]?.bind String.toNat?).getD 1000
@@ -64,5 +84,6 @@ def main (args : List String) : IO Unit := do
     | "json"  => pure (benchJson size iters)
     | "arith" => pure (benchArith size iters)
     | "csv"   => pure (benchCsv size iters)
+    | "bytes" => pure (benchBytes size iters)
     | other   => throw (IO.userError s!"unknown workload: {other}")
   IO.println s!"{workload} size={size} iters={iters} tally={tally}"
