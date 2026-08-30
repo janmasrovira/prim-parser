@@ -4,6 +4,7 @@ import PrimParser.Byte
 import PrimParser.BytesWindow
 import PrimParser.GradedMonad
 import PrimParser.Input
+import PrimParser.Json
 import PrimParser.Necessity
 import PrimParser.NonEmptyList
 import PrimParser.Properties
