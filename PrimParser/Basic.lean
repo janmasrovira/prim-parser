@@ -3,7 +3,7 @@ import PrimParser.Input
 import PrimParser.Necessity
 import PrimParser.GradedMonad
 
-open Buffer
+open Buffer Reader
 
 /-!
 # PrimParser
@@ -164,9 +164,9 @@ end Parser
 
 /-- A parser with error type `ε`, static grade `g`, and result type `α`.
 The grade tracks error and consumption behavior at the type level. -/
-structure Parser (σ τ : Type) [Buffer σ τ] (ε : Type) (g : Grade) (α : Type) where
-  run : ∀ {n}, Input σ τ n → Parser.Outcome ε n g.consumes α
-  sound : ∀ {n} (inp : Input σ τ n), Parser.Outcome.Sound g.errors (run inp) := by
+structure Parser (σ τ : Type) [Buffer σ] [Reader σ τ] (ε : Type) (g : Grade) (α : Type) where
+  run : ∀ {n}, Input σ n → Parser.Outcome ε n g.consumes α
+  sound : ∀ {n} (inp : Input σ n), Parser.Outcome.Sound g.errors (run inp) := by
     intro _ _
     first
       | assumption
@@ -178,7 +178,7 @@ namespace Parser
 abbrev TokenParser (τ ε : Type) (g : Grade) (α : Type) : Type := Parser (Array τ) τ ε g α
 
 variable
-  {σ τ : Type} [Buffer σ τ]
+  {σ τ : Type} [Buffer σ] [Reader σ τ]
   {α β γ ε ε' : Type}
   {n m : Nat}
   {g g' : Grade}
@@ -187,7 +187,7 @@ variable
 
 @[ext] theorem ext
   {p q : Parser σ τ ε g α}
-  (h : ∀ {m} (t : Input σ τ m), p.run t = q.run t)
+  (h : ∀ {m} (t : Input σ m), p.run t = q.run t)
   : p = q := by
   obtain ⟨pr, ps⟩ := p; obtain ⟨qr, qs⟩ := q
   have hr : @pr = @qr := by funext m t; exact h t
@@ -294,7 +294,7 @@ def Success.trans (s : Success m gc α) (h : m ≤ n) : Success n (gc ⊔ possib
   witness := consumptionWitness.trans r1.witness r2.witness
 
 @[inline, simp] def Success.bindParser {xc fe fc : Necessity}
-  (t : Input σ τ n)
+  (t : Input σ n)
   (x : Success n xc α)
   (f : α → Parser σ τ ε ⟨fe, fc⟩ β)
   : Outcome ε n (xc ⊔ fc) β :=
@@ -315,12 +315,12 @@ theorem Outcome.throw_sound {e : ε} (h : possibly ≤ ge)
 
 @[inline] def handle
   (p : Parser σ τ ε g α)
-  (onSuccess : ∀ {n}, Input σ τ n →
+  (onSuccess : ∀ {n}, Input σ n →
     g.errors ≤ possibly → Success n g.consumes α → Outcome ε' n g'.consumes β)
-  (soundSuccess : ∀ {n} {t : Input σ τ n} h r, Outcome.Sound g'.errors (onSuccess t h r))
-  (onError : ∀ {n}, Input σ τ n →
+  (soundSuccess : ∀ {n} {t : Input σ n} h r, Outcome.Sound g'.errors (onSuccess t h r))
+  (onError : ∀ {n}, Input σ n →
     possibly ≤ g.errors → Failure n ε → Outcome ε' n g'.consumes β)
-  (soundError : ∀ {n} {t : Input σ τ n} h f, Outcome.Sound g'.errors (onError t h f))
+  (soundError : ∀ {n} {t : Input σ n} h f, Outcome.Sound g'.errors (onError t h f))
   : Parser σ τ ε' g' β where
   run t := p.run t |>.handle (p.sound t) (onSuccess t) (onError t)
   sound t := Outcome.handle_sound (p.sound t) (soundSuccess (t := t)) soundError
@@ -347,7 +347,7 @@ def bind
 
 instance [i : Nonempty σ] : IsEmpty (Parser σ τ ε impossible α) where
   false p := i.elim fun s => by
-    let inp : Input σ τ 0 := ⟨s, Nat.zero_le _⟩
+    let inp : Input σ 0 := ⟨s, Nat.zero_le _⟩
     have h := p.sound inp
     cases hr : p.run inp with
     | failure f => rw [hr] at h; contradiction
@@ -366,10 +366,10 @@ instance : GradedApplicative (Parser σ τ ε) where
 instance : GradedMonad (Parser σ τ ε) where
   gbind := bind
 
-theorem gmap_run (f : α → β) (p : Parser σ τ ε g α) (t : Input σ τ n)
+theorem gmap_run (f : α → β) (p : Parser σ τ ε g α) (t : Input σ n)
   : (f <$>ᵍ p).run t = f <$> p.run t := rfl
 
-theorem gbind_run (m : Parser σ τ ε g α) (k : α → Parser σ τ ε g' β) (t : Input σ τ n)
+theorem gbind_run (m : Parser σ τ ε g α) (k : α → Parser σ τ ε g' β) (t : Input σ n)
   : (m >>=ᵍ k).run t
     = (m.run t).handle (m.sound t) (fun _ x => x.bindParser t k) (fun _ e => failure e) := rfl
 
@@ -377,7 +377,7 @@ private def fixGo [ParserError ε]
   {n : Nat}
   (h : possibly ≤ ge)
   (f : Parser σ τ ε ⟨ge, always⟩ α → Parser σ τ ε ⟨ge, always⟩ α)
-  (t : Input σ τ n)
+  (t : Input σ n)
   : {o : Outcome ε n always α // Outcome.Sound ge o} :=
   let self : Parser σ τ ε ⟨ge, always⟩ α :=
     { run {k} t' :=
@@ -551,7 +551,7 @@ def weaken (p : Parser σ τ ε ⟨ge, gc⟩ α) : Parser σ τ ε fallible α :
   p.weakenErrors.weakenConsumes
 
 /-- Run a parser on a `Input`. -/
-def runOn (p : Parser σ τ ε g α) (t : Input σ τ n) : Except ε α :=
+def runOn (p : Parser σ τ ε g α) (t : Input σ n) : Except ε α :=
   (p.run t).handle (p.sound t) (fun _ r => .ok r.result) (fun _ f => .error f.error)
 
 abbrev Except.Sound (errors : Necessity) {α : Type} (r : Except ε α) : Prop :=
@@ -559,24 +559,24 @@ abbrev Except.Sound (errors : Necessity) {α : Type} (r : Except ε α) : Prop :
   | .error _ => possibly ≤ errors
   | .ok _ => errors ≤ possibly
 
-theorem runOn_sound (p : Parser σ τ ε g α) (t : Input σ τ n)
+theorem runOn_sound (p : Parser σ τ ε g α) (t : Input σ n)
   : Except.Sound g.errors (p.runOn t) :=
   Outcome.handle_prop (p.sound _) (fun h _ => h) (fun h _ => h)
 
 /-- Consume a single token. -/
 def anyTok : Parser σ τ Error conditional τ where
   run {n} inp :=
-    match h : inp.nextTok with
+    match h : inp.nextTok (τ := τ) with
     | some t =>
       have hle := inp.width_le h
-      have hpos := Buffer.width_pos (σ := σ) t
+      have hpos := Reader.width_pos (σ := σ) t
       success { result := t
                 restSize := n - width σ t }
     | none => failure { error := Error.eof, restSize := n }
 
 section
 
-variable {t : τ} {inp : Input σ τ n}
+variable {t : τ} {inp : Input σ n}
 
 theorem anyTok_run_some
   (h : inp.nextTok = some t := by assumption)
@@ -587,9 +587,9 @@ theorem anyTok_run_some
   simp only [anyTok]; split <;> rw [h] at * <;> simp_all
 
 theorem anyTok_run_eof
-  (h : inp.nextTok = none := by
+  (h : inp.nextTok (τ := τ) = none := by
     first | assumption | exact Input.nextTok_eq_none)
-  : anyTok.run inp
+  : (anyTok (σ := σ) (τ := τ)).run inp
     = failure { error := Error.eof
                 restSize := n } := by
   simp only [anyTok]; split <;> simp_all
@@ -615,7 +615,7 @@ def satisfy (f : τ → Bool) : Parser σ τ Error conditional τ :=
 
 section
 
-variable {f : τ → Bool} {t : τ} {inp : Input σ τ n}
+variable {f : τ → Bool} {t : τ} {inp : Input σ n}
 
 theorem satisfy_run_accept
   (h : inp.nextTok = some t := by assumption)
@@ -635,14 +635,14 @@ theorem satisfy_run_reject
                 restSize := n - width σ t } := by
   have : consumptionWitness (n - width σ t) n always := by
     have := inp.width_le h
-    have := Buffer.width_pos (σ := σ) t
+    have := Reader.width_pos (σ := σ) t
     omega
   simp [satisfy, token, gbind_run]
   rw [Outcome.handle_success anyTok_run_some]
   simp [throw, Outcome.throw, hf, Failure.trans]
 
 theorem satisfy_run_eof
-  (h : inp.nextTok = none := by
+  (h : inp.nextTok (τ := τ) = none := by
     first | assumption | exact Input.nextTok_eq_none)
   : (satisfy f).run inp
     = failure { error := Error.eof
@@ -697,7 +697,7 @@ def manyTill [ParserError ε]
 /-- Apply `p` zero or more times, collecting results. Requires `p` to always consume. -/
 def many (p : Parser σ τ ε ⟨ge, always⟩ α) : Parser σ τ ε flexible (List α) where
   run :=
-    let rec go {n} (t : Input σ τ n) : Success n possibly (List α) :=
+    let rec go {n} (t : Input σ n) : Success n possibly (List α) :=
       match p.run t with
       | .failure _ => { result := [], restSize := n }
       | .success r =>
@@ -896,8 +896,8 @@ def chainl1
 /-- Succeed only at end of input, consuming nothing. -/
 def eof : Parser σ τ Error lookahead PUnit where
   run {n} t := match n with
-    | .zero => ok () |>.run t
-    | _ => throw Error.fail |>.run t
+    | .zero => ok (σ := σ) (τ := τ) () |>.run t
+    | _ => throw (σ := σ) (τ := τ) Error.fail |>.run t
 
 /-- Run `p` without consuming input, keeping only the result. -/
 def lookahead (p : Parser σ τ Error ⟨ge, gc⟩ α) : Parser σ τ Error ⟨ge, never⟩ α :=

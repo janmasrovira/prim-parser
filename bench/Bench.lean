@@ -12,7 +12,7 @@ import PrimParser.Byte
 open Parser Parser.Utf8 Parser.Byte
 
 /-- Build a length-indexed `Input` from a `String`. -/
-def toInput (s : String) : Input ByteArray Char s.toUTF8.size := Input.ofString s
+def toInput (s : String) : Input ByteArray s.toUTF8.size := Input.ofString s
 
 /-- `[0, 1, 2, ..., n-1]` as JSON. -/
 def genJson (n : Nat) : String :=

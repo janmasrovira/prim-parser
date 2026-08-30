@@ -1,69 +1,72 @@
-import PrimParser.Buffer
+import PrimParser.Reader
 
 /-! Length-indexed parser input. -/
 
-open Buffer
+open Buffer Reader
 
 /-- Input to a parser. `n` is the number of units that haven't been consumed yet.
 
 NOTE: The main reason `n` is a type parameter instead of a field is performance.
 Because `n` is not a field, `buf` is the only non-Prop field, so `Input` is erased during compilation.
 -/
-structure Input (σ τ : Type) [Buffer σ τ] (n : Nat) where
+structure Input (σ : Type) [Buffer σ] (n : Nat) where
   buf : σ
-  valid : n ≤ size τ buf
+  valid : n ≤ size buf
 
 namespace Input
 
-variable {σ τ : Type} [Buffer σ τ] {n m k : Nat}
+variable {σ τ : Type} [Buffer σ] {n m k : Nat}
 
-abbrev nextTok (inp : Input σ τ n) : Option τ := Buffer.nextTok inp.buf n
+abbrev nextTok [Reader σ τ] (inp : Input σ n) : Option τ := Reader.nextTok inp.buf n
 
 theorem width_le
   {t : τ}
-  (inp : Input σ τ n)
+  [Reader σ τ]
+  (inp : Input σ n)
   (h : inp.nextTok = some t)
   : width σ t ≤ n :=
-  Buffer.nextTok_le h
+  Reader.nextTok_le h
 
 theorem sub_width_lt
   {t : τ}
-  {inp : Input σ τ n}
+  [Reader σ τ]
+  {inp : Input σ n}
   (h : inp.nextTok = some t)
   : n - width σ t < n :=
-  Buffer.sub_width_lt h
+  Reader.sub_width_lt h
 
-@[simp] theorem nextTok_eq_none {inp : Input σ τ 0} : inp.nextTok = none :=
-  Buffer.nextTok_zero _
+@[simp] theorem nextTok_eq_none [Reader σ τ] {inp : Input σ 0}
+  : inp.nextTok (τ := τ) = none :=
+  Reader.nextTok_zero _
 
-@[inline] def dropTo (inp : Input σ τ n) (m : Nat) (h : m ≤ n := by omega) : Input σ τ m where
+@[inline] def dropTo (inp : Input σ n) (m : Nat) (h : m ≤ n := by omega) : Input σ m where
   buf := inp.buf
   valid := h.trans inp.valid
 
-@[simp] theorem dropTo_self (inp : Input σ τ n) (h : n ≤ n) : inp.dropTo n h = inp := rfl
+@[simp] theorem dropTo_self (inp : Input σ n) (h : n ≤ n) : inp.dropTo n h = inp := rfl
 
-@[simp] theorem dropTo_trans (inp : Input σ τ n) (h : m ≤ n) (h' : k ≤ m)
+@[simp] theorem dropTo_trans (inp : Input σ n) (h : m ≤ n) (h' : k ≤ m)
   : (inp.dropTo m h).dropTo k h' = inp.dropTo k (h'.trans h) := rfl
 
-@[simp] theorem dropTo_buf (inp : Input σ τ n) (h : m ≤ n) : (inp.dropTo m h).buf = inp.buf := rfl
+@[simp] theorem dropTo_buf (inp : Input σ n) (h : m ≤ n) : (inp.dropTo m h).buf = inp.buf := rfl
 
 /-- how many units have been consumedfrom `inp`. -/
-@[inline] def pos (inp : Input σ τ n) : Nat := size τ inp.buf - n
+@[inline] def pos (inp : Input σ n) : Nat := size inp.buf - n
 
-@[simp] theorem pos_dropTo (inp : Input σ τ n) (h : m ≤ n)
+@[simp] theorem pos_dropTo (inp : Input σ n) (h : m ≤ n)
   : (inp.dropTo m h).pos = inp.pos + (n - m) := by
   have := inp.valid; simp only [pos, dropTo_buf]; omega
 
-theorem pos_lt (inp : Input σ τ (n + 1)) : inp.pos < size τ inp.buf := by
+theorem pos_lt (inp : Input σ (n + 1)) : inp.pos < size inp.buf := by
   have := inp.valid; simp only [pos]; omega
 
 /-- Move past one token. -/
-abbrev advance (inp : Input σ τ n) (t : τ) : Input σ τ (n - width σ t) :=
+abbrev advance [Reader σ τ] (inp : Input σ n) (t : τ) : Input σ (n - width σ t) :=
   inp.dropTo (n - width σ t)
 
 /-- Skip forward while `f` holds, returning the number of units left unconsumed. -/
-@[specialize] def skipWhile (f : τ → Bool) {n : Nat} (inp : Input σ τ n) : {m : Nat // m ≤ n} :=
-  match h : inp.nextTok with
+@[specialize] def skipWhile [Reader σ τ] (f : τ → Bool) {n : Nat} (inp : Input σ n) : {m : Nat // m ≤ n} :=
+  match h : inp.nextTok (τ := τ) with
   | some t =>
     if f t then
       have := inp.width_le h
@@ -76,7 +79,7 @@ abbrev advance (inp : Input σ τ n) (t : τ) : Input σ τ (n - width σ t) :=
 
 section
 
-variable {f : τ → Bool} {t : τ} {inp : Input σ τ n}
+variable [Reader σ τ] {f : τ → Bool} {t : τ} {inp : Input σ n}
 
 theorem skipWhile_accept
   (h : inp.nextTok = some t := by assumption)
@@ -91,22 +94,22 @@ theorem skipWhile_reject
   rw [skipWhile]; split <;> simp_all
 
 theorem skipWhile_eof
-  (h : inp.nextTok = none := by assumption)
+  (h : inp.nextTok (τ := τ) = none := by assumption)
   : (skipWhile f inp).val = n := by
   rw [skipWhile]; split <;> simp_all
 
 end
 
 /-- The scanners make progress exactly when the next token is accepted. -/
-theorem skipWhile_lt_iff {f : τ → Bool} {inp : Input σ τ n}
+theorem skipWhile_lt_iff [Reader σ τ] {f : τ → Bool} {inp : Input σ n}
   : (skipWhile f inp).val < n ↔ ∃ t, inp.nextTok = some t ∧ f t := by
   fun_cases skipWhile f inp <;> simp_all; omega
 
-def ofArray {τ : Type} (a : Array τ) : Input (Array τ) τ a.size where
+def ofArray {τ : Type} (a : Array τ) : Input (Array τ) a.size where
   buf := a
   valid := by simp
 
-def ofByteArray (b : ByteArray) : Input ByteArray UInt8 b.size where
+def ofByteArray (b : ByteArray) : Input ByteArray b.size where
   buf := b
   valid := by simp
 
@@ -114,20 +117,20 @@ section Bytes
 
 variable {n : Nat}
 
-@[inline] def head (inp : Input ByteArray Char (n + 1)) : UInt8 :=
+@[inline] def head (inp : Input ByteArray (n + 1)) : UInt8 :=
   have : inp.pos < inp.buf.size := by simpa using inp.pos_lt
   inp.buf[inp.pos]
 
-def ofString (s : String) : Input ByteArray Char s.toUTF8.size where
+def ofString (s : String) : Input ByteArray s.toUTF8.size where
   buf := s.toUTF8
   valid := by simp
 
 /-- Collect characters while `f` holds, returning them as a `String`. -/
-@[specialize] def takeWhile (f : Char → Bool) {n : Nat} (inp : Input ByteArray Char n) : String :=
+@[specialize] def takeWhile (f : Char → Bool) {n : Nat} (inp : Input ByteArray n) : String :=
   go inp ""
 where
-  @[specialize] go {m : Nat} (inp : Input ByteArray Char m) (acc : String) : String :=
-    match h : inp.nextTok with
+  @[specialize] go {m : Nat} (inp : Input ByteArray m) (acc : String) : String :=
+    match h : inp.nextTok (τ := Char) with
     | some c =>
       if f c then
         have : c.utf8Size ≤ m := by simpa using inp.width_le h
@@ -137,7 +140,7 @@ where
     | none => acc
   termination_by m
 
-variable {f : Char → Bool} {c : Char} {inp : Input ByteArray Char n} {acc : String}
+variable {f : Char → Bool} {c : Char} {inp : Input ByteArray n} {acc : String}
 
 theorem takeWhile_go_accept
   (h : inp.nextTok = some c := by assumption)
@@ -152,7 +155,7 @@ theorem takeWhile_go_reject
   rw [takeWhile.go]; split <;> simp_all
 
 theorem takeWhile_go_eof
-  (h : inp.nextTok = none := by assumption)
+  (h : inp.nextTok (τ := Char) = none := by assumption)
   : takeWhile.go f inp acc = acc := by
   rw [takeWhile.go]; split <;> simp_all
 
@@ -162,12 +165,12 @@ theorem takeWhile_reject
   : takeWhile f inp = "" := by rw [takeWhile, takeWhile_go_reject]
 
 theorem takeWhile_eof
-  (h : inp.nextTok = none)
+  (h : inp.nextTok (τ := Char) = none)
   : takeWhile f inp = "" := by rw [takeWhile, takeWhile_go_eof]
 
 private theorem utf8ByteSize_takeWhile_go
   (f : Char → Bool)
-  (inp : Input ByteArray Char n)
+  (inp : Input ByteArray n)
   (acc : String)
   : (takeWhile.go f inp acc).utf8ByteSize + (skipWhile f inp).val = acc.utf8ByteSize + n := by
   fun_induction takeWhile.go f inp acc with
@@ -180,13 +183,13 @@ private theorem utf8ByteSize_takeWhile_go
 
 theorem utf8ByteSize_takeWhile
   (f : Char → Bool)
-  (inp : Input ByteArray Char n)
+  (inp : Input ByteArray n)
   : (takeWhile f inp).utf8ByteSize + (skipWhile f inp).val = n := by
   simp [takeWhile, utf8ByteSize_takeWhile_go]
 
 theorem val_skipWhile
   (f : Char → Bool)
-  (inp : Input ByteArray Char n)
+  (inp : Input ByteArray n)
   : (skipWhile f inp).val = n - (takeWhile f inp).utf8ByteSize := by
   have := utf8ByteSize_takeWhile f inp
   omega
@@ -203,7 +206,7 @@ theorem utf8Size_le_utf8ByteSize_takeWhile
   simp only [width_byteArray] at *
   omega
 
-theorem utf8ByteSize_takeWhile_pos_iff (f : Char → Bool) (inp : Input ByteArray Char n)
+theorem utf8ByteSize_takeWhile_pos_iff (f : Char → Bool) (inp : Input ByteArray n)
   : 0 < (takeWhile f inp).utf8ByteSize ↔ ∃ c, inp.nextTok = some c ∧ f c := by
   rw [← skipWhile_lt_iff]
   have := utf8ByteSize_takeWhile f inp

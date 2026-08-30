@@ -1,7 +1,7 @@
 import PrimParser.Basic
 import PrimParser.BytesWindow
 
-open Buffer
+open Buffer Reader
 
 /-!
 # Byte parsers
@@ -29,9 +29,9 @@ namespace Byte
 def take1 (k : Nat) : ByteParser Error conditional ByteArray :=
   (·.toList.toByteArray) <$>ᵍ count1 k anyTok
 
-private theorem pos_add_le {m : Nat} (t : Input ByteArray UInt8 n) (h : m + 1 ≤ n)
+private theorem pos_add_le {m : Nat} (t : Input ByteArray n) (h : m + 1 ≤ n)
   : t.pos + m + 1 ≤ t.buf.size := by
-  have := t.valid; simp only [Input.pos, size_uint8] at *; omega
+  have := t.valid; simp only [Input.pos, size_byteArray] at *; omega
 
 /-- Consume exactly `k + 1` bytes and decode them in place. -/
 @[inline] private def withTake1
@@ -55,19 +55,19 @@ private def takeRestImpl : ByteParser Error flexible ByteArray where
               restSize := 0 }
 
 private theorem nextTok_eq
-  (t : Input ByteArray UInt8 (n + 1))
+  (t : Input ByteArray (n + 1))
   (h : t.pos < t.buf.size := by simpa using t.pos_lt)
   : t.nextTok = some t.buf[t.pos] := by simp [Input.pos]
 
 theorem many_go_anyTok_restSize
-  (t : Input ByteArray UInt8 n)
-  : (many.go anyTok t).restSize = 0 := by
+  (t : Input ByteArray n)
+  : (many.go (anyTok (τ := UInt8)) t).restSize = 0 := by
   induction n <;> rw [many.go]
   case zero => rw [anyTok_run_eof]
   case succ n ih => rw [anyTok_run_some (nextTok_eq t), ih]
 
 theorem many_go_anyTok_result
-  (t : Input ByteArray UInt8 n)
+  (t : Input ByteArray n)
   : (many.go anyTok t).result = t.buf.data.toList.drop t.pos := by
   induction n <;> rw [many.go]
   case zero => simp [anyTok_run_eof, Input.pos]
@@ -148,7 +148,7 @@ variable
   {decode : BytesWindow (k + 1) → α}
 
 private theorem withTake1_run_success
-  {t : Input ByteArray UInt8 n}
+  {t : Input ByteArray n}
   (h : k + 1 ≤ n := by assumption)
   (hp : t.pos + (k + 1) ≤ t.buf.size := by exact pos_add_le _ (by omega))
   : (withTake1 k decode).run t
@@ -157,14 +157,14 @@ private theorem withTake1_run_success
   simp [withTake1, h]
 
 private theorem withTake1_run_eof
-  {t : Input ByteArray UInt8 n}
+  {t : Input ByteArray n}
   (h : ¬ k + 1 ≤ n := by assumption)
   : (withTake1 k decode).run t = failure { error := Error.eof, restSize := 0 } := by
   simp [withTake1, h]
 
 end
 
-private theorem gpure_run (a : α) (t : Input ByteArray UInt8 n)
+private theorem gpure_run (a : α) (t : Input ByteArray n)
   : (gpure a : ByteParser Error 1 α).run t = success { result := a, restSize := n } := rfl
 
 private theorem anyTok_eq_withTake1
