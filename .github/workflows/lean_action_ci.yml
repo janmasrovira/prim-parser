@@ -13,3 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: leanprover/lean-action@v1
+      - uses: actions/checkout@v5
+        with:
+          repository: nst/JSONTestSuite
+          ref: 1ef36fa01286573e846ac449e8683f8833c5b26a
+          path: JSONTestSuite
+      - run: lake exe json-test-suite JSONTestSuite/test_parsing
