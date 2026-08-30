@@ -6,7 +6,7 @@ open Parser Parser.Utf8
 
 namespace Parser.Json
 
-/-- Built only with `number` parser. -/
+/-- Can only be constructed by the `number` parser. -/
 structure Number where
   private mk ::
   raw : String
