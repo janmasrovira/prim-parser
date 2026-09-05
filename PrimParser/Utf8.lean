@@ -296,6 +296,25 @@ def nat : Utf8Parser Error conditional Nat := gdo
   let ds ← many digit
   return ds.foldl (fun acc d => acc * 10 + d) d
 
+private def natImpl : Utf8Parser Error conditional Nat where
+  run {n} t :=
+    let r := t.foldDigits
+    if h : r.2 < n then
+      success { result := r.1
+                restSize := r.2
+                witness := h }
+    else
+      match t.nextTok (τ := Char) with
+      | some c =>
+        failure { error := Error.fail
+                  restSize := n - c.utf8Size }
+      | none =>
+        failure { error := Error.eof
+                  restSize := n }
+
+@[csimp] private theorem nat_eq_impl : @nat = @natImpl := by
+  sorry
+
 /-- Parse an integer (optional leading `-` followed by digits). -/
 def int : Utf8Parser Error conditional Int := gdo
   let neg ← optional (char '-')

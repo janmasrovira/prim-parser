@@ -212,6 +212,20 @@ theorem utf8ByteSize_takeWhile_pos_iff (f : Char → Bool) (inp : Input ByteArra
   have := utf8ByteSize_takeWhile f inp
   omega
 
+/-- Parse a sequence of ASCII digits as a decimal value. -/
+def foldDigits {n : Nat} (inp : Input ByteArray n) : Nat × Nat :=
+  go inp 0
+where
+  go {m : Nat} (inp : Input ByteArray m) (acc : Nat) : Nat × Nat :=
+    match h : inp.nextTok (τ := Char) with
+    | some c =>
+      if c.isDigit then
+        have : c.utf8Size <= m := by simpa using inp.width_le h
+        have := Char.utf8Size_pos c
+        go (inp.advance c) (acc * 10 + (c.toNat - '0'.toNat))
+      else (acc, m)
+    | none => (acc, m)
+
 end Bytes
 
 end Input
