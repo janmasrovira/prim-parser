@@ -290,11 +290,83 @@ def braces (p : Utf8Parser Error ⟨ge, gc⟩ α)
 def digit : Utf8Parser Error conditional Nat :=
   token fun c => if c.isDigit then some (c.toNat - '0'.toNat) else none
 
+section
+
+variable {c : Char} {t : Input ByteArray n}
+
+theorem digit_run_accept
+  (h : t.nextTok = some c := by assumption)
+  (hd : c.isDigit = true := by assumption)
+  : digit.run t
+      = success { result := c.toNat - '0'.toNat
+                  restSize := n - width ByteArray c
+                  witness := Input.sub_width_lt h } := by
+  rw [digit, token, gbind_run, Outcome.handle_success anyTok_run_some]
+  simp [ok, hd]
+
+theorem digit_run_reject
+  (h : t.nextTok = some c := by assumption)
+  (hd : ¬ c.isDigit := by assumption)
+  : digit.run t
+      = failure { error := Error.fail
+                  restSize := n - width ByteArray c } := by
+  have : consumptionWitness (n - width ByteArray c) n always := by
+    have := t.width_le h
+    have := Reader.width_pos (σ := ByteArray) c
+    omega
+  simp [digit, token, gbind_run]
+  rw [Outcome.handle_success anyTok_run_some]
+  simp [throw, Outcome.throw, hd, Failure.trans]
+
+theorem digit_run_eof
+  (h : t.nextTok (τ := Char) = none := by first | assumption | exact Input.nextTok_eq_none)
+  : digit.run t
+      = failure { error := Error.eof
+                  restSize := n } := by
+  simp only [digit, token, gbind_run]
+  rw [Outcome.handle_failure anyTok_run_eof]
+
+end
+
 /-- Parse a natural number (one or more digits). -/
 def nat : Utf8Parser Error conditional Nat := gdo
   let d ← digit
   let ds ← many digit
   return ds.foldl (fun acc d => acc * 10 + d) d
+
+private theorem many_go_digit
+  (t : Input ByteArray n)
+  (acc : Nat)
+  : ((many.go digit t).result.foldl (fun acc d => acc * 10 + d) acc, (many.go digit t).restSize)
+      = Input.foldDigits.go t acc := by
+  fun_induction Input.foldDigits.go t acc <;> rw [many.go]
+  case case1 => rw [digit_run_accept]; grind
+  case case2 => simp_all [digit_run_reject]
+  case case3 => simp_all [digit_run_eof]
+
+private theorem nat_run_accept
+  {c : Char}
+  {t : Input ByteArray n}
+  (h : t.nextTok = some c)
+  (hd : c.isDigit = true)
+  : nat.run t
+      = success { result := (Input.foldDigits t).1
+                  restSize := (Input.foldDigits t).2
+                  witness := (Input.foldDigits_lt_iff t).mpr ⟨c, h, hd⟩ } := by
+  have hgo := many_go_digit (t.advance c) (c.toNat - '0'.toNat)
+  simp only [nat, gbind_run]
+  rw [Outcome.handle_success (digit_run_accept h hd)]
+  simp only [Success.bindParser, many, gbind_run, GradedApplicative.gpure, Outcome.handle,
+             Success.seq, Input.foldDigits, Input.foldDigits_go_accept h hd, Nat.zero_mul,
+             Nat.zero_add, ← hgo]
+
+private theorem nat_run_failure
+  {fl : Failure n Error}
+  {t : Input ByteArray n}
+  (hs  : digit.run t = failure fl)
+  : nat.run t = failure fl := by
+  simp only [nat, gbind_run]
+  rw [Outcome.handle_failure hs]
 
 private def natImpl : Utf8Parser Error conditional Nat where
   run {n} t :=
@@ -313,7 +385,15 @@ private def natImpl : Utf8Parser Error conditional Nat where
                   restSize := n }
 
 @[csimp] private theorem nat_eq_impl : @nat = @natImpl := by
-  sorry
+  ext n t
+  simp only [natImpl, Input.foldDigits_lt_iff]
+  repeat1' split
+  next haccepts =>
+    obtain ⟨c, hd, hf⟩ := haccepts
+    exact nat_run_accept hd hf
+  next hrejects _ c hd =>
+    exact nat_run_failure (digit_run_reject hd fun hf => hrejects ⟨c, hd, hf⟩)
+  next => exact nat_run_failure digit_run_eof
 
 /-- Parse an integer (optional leading `-` followed by digits). -/
 def int : Utf8Parser Error conditional Int := gdo
