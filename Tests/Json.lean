@@ -30,3 +30,9 @@ open Parser Parser.Utf8 Parser.Json
 #guard json.runOption "{\"nested\":{\"ok\":true}}" ==
   some (.object [("nested", .object [("ok", .bool true)])])
 #guard json.runOption "{\"\\u0061\":null}" == some (.object [("a", .null)])
+
+#guard json.runOption "nul" == none
+#guard json.runOption "" == none
+#guard json.runOption "é" == none
+#guard json.runOption "[]" == some (.array [])
+#guard json.runOption "{}" == some (.object [])

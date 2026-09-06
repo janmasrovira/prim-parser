@@ -164,8 +164,16 @@ def value : Utf8Parser Error conditional Value :=
       let members ← sepBy (symbol ',') member
       symbol '}'
       return .object members
-    oneOf (nullValue ::₁
-      [trueValue, falseValue, numberValue, stringValue, arrayValue, objectValue])
+    gdo
+      let b ← lookahead anyByte
+      (match Char.ofUInt8 b with
+      | 'n' => nullValue
+      | 't' => trueValue
+      | 'f' => falseValue
+      | '"' => stringValue
+      | '[' => arrayValue
+      | '{' => objectValue
+      | _ => numberValue)
 
 /-- Parse a JSON document. -/
 def json : Utf8Parser Error conditional Value := gdo
