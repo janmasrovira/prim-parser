@@ -34,6 +34,12 @@ def genCsv (n : Nat) : String :=
 def genBytes (n : Nat) : ByteArray :=
   ((List.range (21 * max 1 n)).map (fun i => UInt8.ofNat (i * 7 % 251))).toByteArray
 
+/-- `n` comma-separated non-negative decimal numbers. Each number is less than
+2^63 so Bignums are not used. -/
+def genDigits (n : Nat) : String :=
+  String.intercalate "," ((List.range (max 1 n)).map fun i =>
+    toString (randNat (mkStdGen i) 0 (2 ^ 63 - 1)).1)
+
 def record : ByteParser Error conditional UInt64 := gdo
   let a ← uint8
   let b ← uint16be
@@ -87,6 +93,13 @@ def benchBytes (size iters : Nat) : Nat :=
     | Parser.success r => (r.result.foldl (· + ·) 0).toNat % 1000000
     | Parser.failure _ => 0
 
+def benchDigits (size iters : Nat) : Nat :=
+  let t := toInput (genDigits size)
+  loop iters fun _ =>
+    match (sepBy (char ',') nat).run t with
+    | Parser.success r => r.result.foldl (· + ·) 0 % 1000000
+    | Parser.failure _ => 0
+
 def main (args : List String) : IO Unit := do
   let workload := args[0]?.getD "json"
   if workload == "json-file" then
@@ -102,9 +115,10 @@ def main (args : List String) : IO Unit := do
     let iters := (args[2]?.bind String.toNat?).getD 100
     let tally ←
       match workload with
-      | "json"  => pure (benchJson size iters)
-      | "arith" => pure (benchArith size iters)
-      | "csv"   => pure (benchCsv size iters)
-      | "bytes" => pure (benchBytes size iters)
-      | other   => throw (IO.userError s!"unknown workload: {other}")
+      | "json"   => pure (benchJson size iters)
+      | "arith"  => pure (benchArith size iters)
+      | "csv"    => pure (benchCsv size iters)
+      | "bytes"  => pure (benchBytes size iters)
+      | "digits" => pure (benchDigits size iters)
+      | other    => throw (IO.userError s!"unknown workload: {other}")
     IO.println s!"{workload} size={size} iters={iters} tally={tally}"

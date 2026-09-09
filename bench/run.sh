@@ -11,7 +11,7 @@
 # hyperfine times the binaries per workload (comparing the two, or just REF_A).
 #
 # Tunables (environment variables):
-#   WORKLOADS  space-separated subset of "json json-file arith csv bytes" (default: all)
+#   WORKLOADS  space-separated subset of "json json-file arith csv bytes digits" (default: all)
 #   JSON_FILE  fixture for json-file (default: bench/data/citm_catalog.json)
 #   SIZE       problem size per workload (default: 2000)
 #   ITERS      reparses per process invocation (default: 200)
@@ -37,7 +37,7 @@ REF_B="${2-main}"
 SINGLE=0
 case "$REF_B" in ""|"-") SINGLE=1 ;; esac
 
-WORKLOADS="${WORKLOADS:-json json-file arith csv bytes}"
+WORKLOADS="${WORKLOADS:-json json-file arith csv bytes digits}"
 JSON_FILE="${JSON_FILE:-$BENCH_DIR/data/citm_catalog.json}"
 SIZE="${SIZE:-2000}"
 ITERS="${ITERS:-200}"
